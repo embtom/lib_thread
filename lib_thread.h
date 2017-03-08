@@ -17,8 +17,6 @@
  */
 
 
-
-
 #ifndef LIB_THREAD_H_
 #define LIB_THREAD_H_
 
