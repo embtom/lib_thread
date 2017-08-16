@@ -20,6 +20,22 @@
 #ifndef LIB_THREAD_H_
 #define LIB_THREAD_H_
 
+#ifdef __cplusplus
+template<class T, void(T::*mem_fn)()>
+void* thunk_ThreadCreate(void* p)
+{
+	/* call member function at address "mem_fn" by dereferencing "p", which is a (type-casted) pointer to an object of class "T"... */
+	((T*)(p)->*mem_fn)();
+	return 0;
+}
+#endif
+
+
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* *******************************************************************
  * includes
  * ******************************************************************/
@@ -53,6 +69,9 @@ typedef struct sem_hdl_attr *sem_hdl_t;
 
 typedef void* (thread_worker_t)(void *);
 
+/* *******************************************************************
+ * function declarations
+ * ******************************************************************/
 
 /* *******************************************************************
  * \brief	Initialization of the lib_thread
@@ -347,5 +366,8 @@ int lib_thread__sem_trywait (sem_hdl_t _hdl);
 
 int lib_thread__msleep (unsigned int _milliseconds);
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* LIB_THREAD_H_ */
