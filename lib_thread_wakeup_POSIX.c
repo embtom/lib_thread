@@ -49,8 +49,15 @@
  * ******************************************************************/
 #define SIGMIN		SIGRTMIN
 #define SIGMAX		SIGRTMAX
+
+#define M_DEV_TIMER_UNUSED			0
+#define M_DEV_TIMER_CONFIRMED		1
+#define M_DEV_TIMER_REQUESTED		2
+
 #define M_DEV_LIB_THREAD_WHP_MODULE_ID 		"LIB_THD_WHP"
 #define M_DEV_MAP_INITIALZED	0xABCDABCD
+
+
 
 /* *******************************************************************
  * custom data types (e.g. enumerations, structures, unions)
@@ -173,6 +180,7 @@ int lib_thread__wakeup_init(void)
 	{
 		if (sigaddset(&sigset, i) != 0){
 			/* should actually never happen */
+			ret = -errno;
 			msg (LOG_LEVEL_error, M_DEV_LIB_THREAD_WHP_MODULE_ID,"::sigaddsetwith ret %i",ret);
 			return ret;
 		}
@@ -208,7 +216,7 @@ int lib_thread__wakeup_init(void)
  *
  * \return	EOK				Success
  *			-EEXEC_NOINIT	Component not (yet) initialized (any more)
- *			-ESTD_BUSY		There are still some wakeup objects currently in use
+ *			--EBUSY		There are still some wakeup objects currently in use
  * ****************************************************************************/
 #ifdef _WIN32
 int lib_thread__wakeup_cleanup(void)
@@ -223,7 +231,7 @@ int lib_thread__wakeup_cleanup(void)
 	if (s_wakeup_init_calls == 1) {
 		/* check whether there are any signals left which are currently in use */
 		if (used_signals_max_cnt > 0){
-			ret = ESTD_BUSY;
+			ret = -EBUSY;
 			msg (LOG_LEVEL_error, M_DEV_LIB_THREAD_WHP_MODULE_ID,"");
 			return ret;
 		}
@@ -242,7 +250,7 @@ int lib_thread__wakeup_cleanup(void)
 
 	/* check whether component is properly initialized */
 	if ((s_wakeup_signals == NULL) || (s_wakeup_init_calls == 0)) {
-		ret = EEXEC_NOINIT;
+		ret = -EEXEC_NOINIT;
 		msg (LOG_LEVEL_error, M_DEV_LIB_THREAD_WHP_MODULE_ID,"");
 		return ret;
 	}
@@ -253,21 +261,23 @@ int lib_thread__wakeup_cleanup(void)
 
 		used_signals = &s_wakeup_signals->used_signals_data;
 
+		pthread_mutex_lock(&s_wakeup_signals->mmap_mtx);
 		/* check whether there are any signals left which are currently in use */
 		for (i = 0; i < s_wakeup_signals->used_signals_max_cnt; i++) {
 			if (used_signals[i] != 0) {
-				ret = ESTD_BUSY;
-				msg (LOG_LEVEL_error, M_DEV_LIB_THREAD_WHP_MODULE_ID,"");
+				pthread_mutex_unlock(&s_wakeup_signals->mmap_mtx);
+				ret = -EBUSY;
+				msg (LOG_LEVEL_error, M_DEV_LIB_THREAD_WHP_MODULE_ID,"Wakeup");
 				return ret;
 			}
 		}
+		pthread_mutex_unlock(&s_wakeup_signals->mmap_mtx);
 	}
 
 	sprintf(&shm_name[0],"/%s_%u",program_invocation_short_name,getpid());
 	shm_unlink(&shm_name[0]);
 	/* decrement initialization count */
 	s_wakeup_init_calls--;
-
 	return EOK;
 }
 
@@ -370,7 +380,7 @@ int lib_thread__wakeup_create(wakeup_hdl_t *_wu_obj, unsigned _interval)
 
 	used_signals = &s_wakeup_signals->used_signals_data;
 	for (i = 0; i < s_wakeup_signals->used_signals_max_cnt; i++){
-		if (used_signals[i] == 0){
+		if (used_signals[i] == M_DEV_TIMER_UNUSED){
 			/* free slot found -> set signal as used and break loop */
 			break;
 		}
@@ -385,6 +395,10 @@ int lib_thread__wakeup_create(wakeup_hdl_t *_wu_obj, unsigned _interval)
 		return ret;
 	}
 
+	used_signals[i] = M_DEV_TIMER_REQUESTED;
+	pthread_mutex_unlock(&s_wakeup_signals->mmap_mtx);
+
+
 	/* initialize sigevent structure in the wakeup object */
 	sigev.sigev_notify = SIGEV_SIGNAL;
 	sigev.sigev_signo = i + SIGMIN;
@@ -393,7 +407,7 @@ int lib_thread__wakeup_create(wakeup_hdl_t *_wu_obj, unsigned _interval)
 	/* create the signal mask that will be used in lib_thread__wakeup_wait */
 	if (sigemptyset(&((*_wu_obj)->sigset)) != 0) {
 		/* should actually never happen */
-		pthread_mutex_unlock(&s_wakeup_signals->mmap_mtx);
+		used_signals[i] = M_DEV_TIMER_UNUSED;
 		ret = -errno;
 		msg (LOG_LEVEL_error, M_DEV_LIB_THREAD_WHP_MODULE_ID,"::sigemptyset");
 		free(*_wu_obj);
@@ -402,7 +416,7 @@ int lib_thread__wakeup_create(wakeup_hdl_t *_wu_obj, unsigned _interval)
 
 	if (sigaddset(&((*_wu_obj)->sigset), sigev.sigev_signo) != 0) {
 		/* should actually never happen */
-		pthread_mutex_unlock(&s_wakeup_signals->mmap_mtx);
+		used_signals[i] = M_DEV_TIMER_UNUSED;
 		ret = -errno;
 		msg (LOG_LEVEL_error, M_DEV_LIB_THREAD_WHP_MODULE_ID,"::sigaddset");
 		free(*_wu_obj);
@@ -412,7 +426,7 @@ int lib_thread__wakeup_create(wakeup_hdl_t *_wu_obj, unsigned _interval)
 	/* create a timer that will generate the signal we have chosen */
 	if (timer_create(clock_src, &sigev, &((*_wu_obj)->timer_id)) != 0){
 		/* error occurred -> remove signal from signal set and set signal as unused */
-		pthread_mutex_unlock(&s_wakeup_signals->mmap_mtx);
+		used_signals[i] = M_DEV_TIMER_UNUSED;
 		ret = -errno;
 		msg (LOG_LEVEL_error, M_DEV_LIB_THREAD_WHP_MODULE_ID,"::timer_create");
 		free(*_wu_obj);
@@ -426,7 +440,7 @@ int lib_thread__wakeup_create(wakeup_hdl_t *_wu_obj, unsigned _interval)
 	itval.it_interval.tv_nsec	= ((int)_interval % 1000) * 1000000;
 	if (timer_settime((*_wu_obj)->timer_id, 0, &itval, NULL) != 0){
 		/* should actually never happen */
-		pthread_mutex_unlock(&s_wakeup_signals->mmap_mtx);
+		used_signals[i] = M_DEV_TIMER_UNUSED;
 		ret = -errno;
 		msg (LOG_LEVEL_error, M_DEV_LIB_THREAD_WHP_MODULE_ID,"::timer_settime");
 		timer_delete((*_wu_obj)->timer_id);
@@ -435,10 +449,8 @@ int lib_thread__wakeup_create(wakeup_hdl_t *_wu_obj, unsigned _interval)
 	}
 
 	/* remember that this signal is used */
-	used_signals[i] = 1;
+	used_signals[i] = M_DEV_TIMER_CONFIRMED;
 	(*_wu_obj)->sig_ind = i;
-
-	pthread_mutex_unlock(&s_wakeup_signals->mmap_mtx);
 
 	return EOK;
 }
