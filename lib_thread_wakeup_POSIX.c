@@ -107,13 +107,14 @@ struct internal_wakeup {
 int lib_thread__wakeup_init(void)
 {
 	int i, ret_man, ret = EOK;
+	int shm_oflag;
 	sigset_t sigset;
 	int shm_fd;
 	char shm_name[NAME_MAX]= {0};
+	int shm_open_loop = 0;
 	unsigned int signals_max_cnt = SIGMAX - SIGMIN + 1;
 	struct signals_region *wakeup_signals;
 	size_t signals_region_size = sizeof(struct signals_region) + signals_max_cnt * sizeof(int);
-
 
 	if (s_wakeup_signals != NULL) {
 		/* check whether component is not (yet) initialized (any more) */
@@ -126,24 +127,23 @@ int lib_thread__wakeup_init(void)
 	/* 	O_EXCL	:	If object already exits exit with EEXIST		*/
 	/*	O_RDWR	: 	Read write access 								*/
 	sprintf(&shm_name[0],"/%s_%u",program_invocation_short_name,getpid());
-	shm_fd = shm_open(&shm_name[0], O_CREAT | O_EXCL | O_RDWR, S_IRUSR | S_IWUSR);
-	if (shm_fd < 0) {
 
-		switch (errno)
-		{
-			case EEXIST : ret_man = EOK; break;
-			default :
-				printf("LIB_THD : %s error at shm_open with %i\n",__func__,-errno);
+	shm_oflag  =  O_RDWR;
+	do {
+
+		shm_fd = shm_open(&shm_name[0], shm_oflag, S_IRUSR | S_IWUSR);
+		shm_oflag = O_CREAT | O_EXCL | O_RDWR;
+
+		if(shm_open_loop > 0) {
+			ret = ftruncate(shm_fd, signals_region_size);
+			if(ret != EOK) {
 				return -EEXEC_FAILINIT;
+			}
 		}
-	}
+		shm_open_loop++;
+	} while ((shm_fd < 0)&&(shm_open_loop < 2));
 
 
-	ret = ftruncate(shm_fd, signals_region_size);
-	if(ret != EOK) {
-		close(shm_fd);
-		return -EEXEC_FAILINIT;
-	}
 
 	wakeup_signals = (struct signals_region *)mmap(NULL,signals_region_size,PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
 	if (wakeup_signals == MAP_FAILED) {
