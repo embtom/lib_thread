@@ -326,7 +326,9 @@ int lib_thread__create (thread_hdl_t *_hdl, thread_worker_t *_worker, void *_arg
 
 	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "lib_thread__create : failed with retval %i\n", ret );
 
-	*_hdl = NULL;
+	if (_hdl != NULL) {
+		*_hdl = NULL;
+	}
 	return ret;
 }
 
