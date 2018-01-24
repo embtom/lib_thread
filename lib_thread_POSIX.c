@@ -222,15 +222,13 @@ int lib_thread__create (thread_hdl_t *_hdl, thread_worker_t *_worker, void *_arg
 
 	prio_min = sched_get_priority_min(sched);
 	prio_max = sched_get_priority_max(sched);
-	if((prio_min == -1) || (prio_max == -1))
-	{
-		ret = -errno;
+	if((prio_min == -1) || (prio_max == -1)) {
+		ret = convert_std_errno(errno);
 		goto ERR_0;
 	}
 
 	/* Priority check is only necessary if PROCESS_SCHED_fifo or PROCESS_SCHED_rr is selected during the init */
-	if (prio_min == prio_max)
-	{
+	if (prio_min == prio_max) {
 		thread_prio = prio_min;
 	}
 	else
@@ -238,7 +236,7 @@ int lib_thread__create (thread_hdl_t *_hdl, thread_worker_t *_worker, void *_arg
 		thread_prio = priority_param.__sched_priority + _relative_priority;
 		if ((thread_prio < prio_min ) || (thread_prio > prio_max ))
 		{
-			ret = -ERANGE;
+			ret = -EPAR_RANGE;
 			goto ERR_0;
 		}
 	}
@@ -349,22 +347,19 @@ int lib_thread__join(thread_hdl_t *_hdl, void **_ret_val)
 {
 	int ret, threadid;
 
-	if (_hdl == NULL)
-	{
+	if (_hdl == NULL) {
 		ret = -EPAR_NULL;
 		goto ERR_0;
 	}
 
-	if (*_hdl == NULL)
-	{
-		ret = -ENOENT;
+	if (*_hdl == NULL){
+		ret = -ESTD_SRCH;
 		goto ERR_0;
 	}
 
 	ret = pthread_join((*_hdl)->thread_hdl, _ret_val);
-	if (ret != EOK)
-	{
-		ret = -ret;
+	if (ret != EOK) {
+		ret = convert_std_errno(ret);
 		goto ERR_0;
 	}
 
@@ -448,12 +443,10 @@ int lib_thread__getname(thread_hdl_t _hdl, char * _name, int _maxlen)
 	if (ret != 0)
 	{
 		/* Mapping of the return vales to the more common on of the libpthread */
-
-		if (ret == EINVAL)  ret = -ERANGE;
-		if (ret == ENOENT)  ret = -ESRCH;
-
-
-		return -ret;
+		if (ret == EINVAL)  ret = ERANGE;
+		if (ret == ENOENT)  ret = ESRCH;
+		ret = convert_std_errno(ret);
+		goto ERR_0;
 	}
 
 	msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "lib_thread__getname :  successfully (Thread ID '%u')\n", _hdl->thread_hdl);
