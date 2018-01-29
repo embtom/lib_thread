@@ -48,6 +48,8 @@ extern "C" {
 #define LIB_THREAD__SGN_INITIALIZER {NULL}
 #define LIB_THREAD__SEM_INITIALIZER {NULL}
 
+#define LIB_THREAD__TIMEOUT_INFINITE	-1
+
 
 /* *******************************************************************
  * custom data types (e.g. enumerations, structures, unions)
@@ -66,6 +68,7 @@ typedef struct thread_hdl_attr *thread_hdl_t;
 typedef struct mutex_hdl_attr *mutex_hdl_t;
 typedef struct signal_hdl_attr *signal_hdl_t;
 typedef struct sem_hdl_attr *sem_hdl_t;
+typedef struct condvar_hdl_attr *cond_hdl_t;
 
 typedef void* (thread_worker_t)(void *);
 
@@ -147,23 +150,30 @@ int lib_thread__cancel(thread_hdl_t _hdl);
  * ---------
  * \remark
  * ---------
- *
  * \param	_hdl			[in] :	handle for the thread to be canceled
- *
  * ---------
  * \return	'0', if successful, < '0' if not successful
  * ******************************************************************/
 int lib_thread__getname(thread_hdl_t _hdl, char * _name, int _maxlen);
 
 /* *******************************************************************
+ * \brief	The calling task sleeps for a defined time
+ * ---------
+ * \remark
+ * ---------
+ * \param	_hdl			:	milliseconds to sleep
+ * ---------
+ * \return	'0', if successful, < '0' if not successful
+ * ******************************************************************/
+int lib_thread__msleep (unsigned int _milliseconds);
+
+/* *******************************************************************
  * \brief	Initialization of a mutex object
  * ---------
  * \remark
  * ---------
- *
  * \param	_hdl			[in/out] :	pointer to the handle of a mutex object
  * 										to initialize
- *
  * ---------
  * \return	'0', if successful, < '0' if not successful
  * ******************************************************************/
@@ -188,9 +198,7 @@ int lib_thread__mutex_destroy (mutex_hdl_t *_hdl);
  * ---------
  * \remark
  * ---------
- *
  * \param	_hdl			[in] :	the handle of a mutex object to lock
- *
  * ---------
  * \return	'0', if successful, < '0' if not successful
  * ******************************************************************/
@@ -201,9 +209,7 @@ int lib_thread__mutex_lock (mutex_hdl_t _hdl);
  * ---------
  * \remark
  * ---------
- *
  * \param	_hdl			[in] :	the handle of a mutex object to lock
- *
  * ---------
  * \return	'0', if successful, < '0' if not successful
  * ******************************************************************/
@@ -214,9 +220,7 @@ int lib_thread__mutex_unlock (mutex_hdl_t _hdl);
  * ---------
  * \remark
  * ---------
- *
  * \param	_hdl			[in] :	the handle of a mutex object to trylock
- *
  * ---------
  * \return	'0', if successful, < '0' if not successful
  * ******************************************************************/
@@ -227,10 +231,8 @@ int lib_thread__mutex_trylock (mutex_hdl_t _hdl);
  * ---------
  * \remark
  * ---------
- *
  * \param	_hdl			[in/out] :	pointer to the handle of a signal object
  * 										to initialize
- *
  * ---------
  * \return	'0', if successful, < '0' if not successful
  * ******************************************************************/
@@ -242,10 +244,8 @@ int lib_thread__signal_init (signal_hdl_t *_hdl);
  * \remark	All waiting threads on a signal_wait condition unblocks with EPERM
  * 			It can be used for a worker thread termination
  * ---------
- *
  * \param	_hdl			[in/out] :	pointer to the handle of a signal object
  * 										to destroy
- *
  * ---------
  * \return	'0', if successful, < '0' if not successful
  * ******************************************************************/
@@ -257,9 +257,7 @@ int lib_thread__signal_destroy (signal_hdl_t *_hdl);
  * \remark	If a signal is emitted without any waiting thread the signal
  * 			gets lost
  * ---------
- *
  * \param	_hdl			[in] : 	handle to a signal object to trigger
- *
  * ---------
  * \return	'0', if successful, < '0' if not successful
  * ******************************************************************/
@@ -271,9 +269,7 @@ int lib_thread__signal_send (signal_hdl_t _hdl);
  * \remark	The calling thread blocks unit the corresponding signal get be triggered.
  *
  * ---------
- *
  * \param	_hdl			[in] : 	handle to a signal object to wait
- *
  * ---------
  * \return	'0', if successful, < '0' if not successful
  * ******************************************************************/
@@ -286,23 +282,19 @@ int lib_thread__signal_wait (signal_hdl_t _hdl);
  * 			the time runs out
  *
  * ---------
- *
  * \param	_hdl			[in] : 	handle to a signal object to wait
- *
  * ---------
  * \return	'0', if successful, < '0' if not successful
  * ******************************************************************/
-int lib_thread__signal_wait_timedwait (signal_hdl_t _hdl, unsigned int _milliseconds);
+int lib_thread__signal_timedwait (signal_hdl_t _hdl, unsigned int _milliseconds);
 
 /* *******************************************************************
  * \brief	Initialization of a semaphore object
  * ---------
  * \remark
  * ---------
- *
  * \param	_hdl			[in/out] :	pointer to the handle of a semaphore object
  * 										to initialize
- *
  * ---------
  * \return	'0', if successful, < '0' if not successful
  * ******************************************************************/
@@ -313,10 +305,8 @@ int lib_thread__sem_init (sem_hdl_t *_hdl, int _count);
  * ---------
  * \remark
  * ---------
- *
  * \param	_hdl			[in/out] :	pointer to the handle of a semaphore object
  * 										to destroy
- *
  * ---------
  * \return	'0', if successful, < '0' if not successful
  * ******************************************************************/
@@ -327,13 +317,23 @@ int lib_thread__sem_destroy (sem_hdl_t *_hdl);
  * ---------
  * \remark	To increment the value of a semaphore
  * ---------
- *
  * \param	_hdl				[in] :	handle of a semaphore object
- *
  * ---------
  * \return	'0', if successful, < '0' if not successful
  * ******************************************************************/
 int lib_thread__sem_post (sem_hdl_t _hdl);
+
+/* *******************************************************************
+ * \brief	Decrement semaphore and if count <=0 calling thread is blocked
+ * ---------
+ * \remark	If the value of the semaphore is negative, the calling process blocks;
+ * 			one of the blocked processes wakes up when another process calls sem_post
+ * ---------
+ * \param	_hdl				[in] :	handle of a semaphore object
+ * ---------
+ * \return	'0', if successful, < '0' if not successful
+ * ******************************************************************/
+int lib_thread__sem_wait (sem_hdl_t _hdl);
 
 /* *******************************************************************
  * \brief	Decrement semaphore and if count <=0 calling thread is blocked
@@ -347,7 +347,7 @@ int lib_thread__sem_post (sem_hdl_t _hdl);
  * ---------
  * \return	'0', if successful, < '0' if not successful
  * ******************************************************************/
-int lib_thread__sem_wait (sem_hdl_t _hdl);
+int lib_thread__sem_timedwait (sem_hdl_t _hdl, int _milliseconds);
 
 /* *******************************************************************
  * \brief	Decrement semaphore and if count <=0 return with error
@@ -355,16 +355,155 @@ int lib_thread__sem_wait (sem_hdl_t _hdl);
  * \remark	If the value of the semaphore is negative, the calling process blocks;
  * 			one of the blocked processes wakes up when another process calls sem_post
  * ---------
- *
  * \param	_hdl			[in] :	handle of a semaphore object
- *
  * ---------
  * \return	'0', if successful, < '0' if not successful
  * ******************************************************************/
 int lib_thread__sem_trywait (sem_hdl_t _hdl);
 
+/* *************************************************************************//**
+ * \brief	Create and initialize a new condvar object
+ * ---------
+ * \remark	On successful creation, a reference to the condvar's handle is stored in
+ * 			_hdl.
+ * ---------
+ * \param	*_hdl [out]	pointer to handle of the cond object (will be allocated; only valid on successful return)
+ * \return	EOK				Success
+ *			-EPAR_NULL		NULL pointer specified for _cond
+ *			-ESTD_BUSY		_cond is registered and not yet destroyed.
+ *			-ESTD_NOMEM		High-level OSes only: Insufficient memory available to initialize the condvar
+ *			-ESTD_AGAIN		High-level OSes only: Insufficient system resources available to initialize the condvar
+ * ****************************************************************************/
+int lib_thread__cond_init(cond_hdl_t *_hdl);
 
-int lib_thread__msleep (unsigned int _milliseconds);
+/* *************************************************************************//**
+ * \brief	Destroy a condvar which is not waited on
+ *
+ * Calling this function does not affect scheduling behavior.
+ * Once successfully destroyed, the condvar's handle is deleted from memory.
+ * Further usage of the handle on interface function calls other than
+ * lib_thread__cond_init() will result in an error.
+ *
+ * WARNINGS:
+ *	-	If the condvar gets destroyed by another thread while still waiting on
+ *		it, the behavior of the waiting call(s) is undefined!
+ *	-	On high-level OSes, this function must not be called from within an
+ *		interrupt context.
+ *
+ * \param	*_cond	[in/out]	pointer to handle of the cond object (is only destroyed on successful return)
+ * \return	EOK				Success
+ *			-EPAR_NULL		NULL pointer specified for _cond
+*			-ESTD_BUSY		There are tasks blocking on _cond
+ *			-ESTD_INVAL		_cond is invalid
+ * ****************************************************************************/
+int lib_thread__cond_destroy(cond_hdl_t *_hdl);
+
+/* *************************************************************************//**
+ * \brief	Unblock a thread waiting on a conditional variable
+ *
+ * This function unblocks a thread waiting on the condition variable.
+ * If more than one thread is blocked, the OS-scheduling policy shall identify
+ * the thread with the highest priority and unblock this thread. Whenever the
+ * threads return at lib_thread__cond_wait() or lib_thread__cond_timedwait(),
+ * it is guaranteed that they own the associated mutex.
+ *
+ * This function may be called whether or not the associated mutex is held by the
+ * calling thread.
+ * This function shall have no effect, if currently no thread blocks on _cond.
+ *
+ * WARNINGS:
+ *	-	This function must not be called from within an interrupt context.
+ *
+ * \param	*_cond	[in]	pointer to handle of the cond object
+ * \return	EOK				Success
+ *			-EPAR_NULL		NULL pointer specified for _cond
+ *			-ESTD_INVAL		_cond is invalid
+ * ****************************************************************************/
+int lib_thread__cond_signal(cond_hdl_t _hdl);
+
+/* *************************************************************************//**
+ * \brief	Unblock all threads waiting on a conditional variable
+ *
+ * This function unblocks all threads currently waiting on the condition variable.
+ * Whenever the threads return at lib_thread__cond_wait() or lib_thread__cond_timedwait(),
+ * it is guaranteed that they own the associated mutex.
+ *
+ * This function may be called whether or not the associated mutex is held by the
+ * calling thread.
+ * This function shall have no effect, if currently no thread blocks on _cond.
+ *
+ * WARNINGS:
+ *	-	This function must not be called from within an interrupt context.
+ *
+ * \param	*_cond	[in]	pointer to handle of the cond object
+ * \return	EOK				Success
+ *			-EPAR_NULL		NULL pointer specified for _cond
+ *			-ESTD_INVAL		_cond is invalid
+ * ****************************************************************************/
+int lib_thread__cond_broadcast(cond_hdl_t _hdl);
+
+/* *************************************************************************//**
+ * \brief	Block on a conditional variable
+ *
+ * This function blocks on a condition variable. This function shall be called
+ * with a mutex locked by the calling thread (otherwise -ESTD_PERM will be returned).
+ * The function will cause the calling thread to block on the condition variable
+ * and release the mutex immediately. Upon function return, the mutex is locked
+ * by the calling thread.
+ *
+ * WARNINGS:
+ *	-	If the condvar gets destroyed by another thread while still waiting on
+ *		it, the behavior of the waiting call(s) is undefined!
+ *	-	If the mutex gets destroyed during this call, the behavior is undefined!
+ *	-	This function must not be called from within an interrupt context.
+ *
+ * \param	*_cond	[in]	pointer to handle of the cond object
+ * 			*_mutex	[in]	pointer to handle of the mutex object
+ * \return	EOK				Success
+ *			-EPAR_NULL		NULL pointer specified for _cond or _mutex
+ *			-ESTD_INVAL		_cond or _mutex is invalid or
+ * 	 	 	 	 	 	 	different mutexes where supplied for concurrent
+ *	 	 	 	 	 	 	lib_thread__cond_timedwait() or lib_thread__cond_wait()
+ *	 	 	 	 	 	 	function calls using the same condition variable.
+ *			-ESTD_PERM		The mutex was not owned by the thread during at the time
+ *							of the call
+ *			-ESTD_ACCES		OSEK only: Function is called from within a prohibited context
+ * ****************************************************************************/
+int lib_thread__cond_wait(cond_hdl_t _hdl, mutex_hdl_t _mtx);
+
+/* *************************************************************************//**
+ * \brief	Block on a conditional variable for a specific time
+ *
+ * This function blocks on a condition variable. This function shall be called
+ * with a mutex locked by the calling thread (otherwise -ESTD_PERM will be returned).
+ * The function will cause the calling thread to block on the condition variable
+ * and release the mutex immediately. Upon function return, the mutex is locked
+ * by the calling thread.
+ * The function will return -EEXEC_TO whenever _tmoms passes before _cond is
+ * signaled or broadcasted. User may call this function with
+ * _tmoms set to LIB_THREAD__TIMEOUT_INFINITE. In this case the function will behave
+ * as lib_thread__cond_wait.
+ *
+ * WARNINGS:
+ *	-	If the condvar gets destroyed by another thread while still waiting on
+ *		it, the behavior of the waiting call(s) is undefined!
+ *	-	If the mutex gets destroyed during this call, the behavior is undefined!
+ *	-	This function must not be called from within an interrupt context.
+ *
+ * \param	*_cond	[in]	pointer to handle of the cond object
+ * 			*_mutex	[in]	pointer to handle of the mutex object
+ * \return	EOK				Success
+ * 			-EEXEC_TO		_tmoms has passed
+ *			-EPAR_NULL		NULL pointer specified for _cond or _mutex
+ *			-ESTD_INVAL		_cond or _mutex is invalid or
+ * 	 	 	 	 	 	 	different mutexes where supplied for concurrent
+ *	 	 	 	 	 	 	lib_thread__cond_timedwait() or lib_thread__cond_wait()
+ *	 	 	 	 	 	 	function calls using the same condition variable.
+ *			-ESTD_PERM		The mutex was not owned by the thread during at the time
+ *							of the call
+ * ****************************************************************************/
+int lib_thread__cond_timedwait(cond_hdl_t _hdl, mutex_hdl_t _mtx, int _tmoms);
+
 
 #ifdef __cplusplus
 }
