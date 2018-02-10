@@ -523,7 +523,7 @@ int lib_thread__mutex_init (mutex_hdl_t *_hdl)
 	}
 
 	*_hdl = hdl;
-	msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s():  successfully (Mutex ID '%u')\n",__func__, (unsigned int)&hdl->mtx_hdl);
+    msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s():  successfully\n",__func__);
 
 	return EOK;
 
@@ -576,8 +576,6 @@ int lib_thread__mutex_destroy (mutex_hdl_t *_hdl)
 		goto ERR_0;
 	}
 
-	mutex_id = (unsigned int)&(*_hdl)->mtx_hdl;
-
 	ret = pthread_mutex_destroy(&(*_hdl)->mtx_hdl);
 	if (ret != EOK) {
 		ret = convert_std_errno(ret);
@@ -586,7 +584,7 @@ int lib_thread__mutex_destroy (mutex_hdl_t *_hdl)
 
 	free(*_hdl);
 	*_hdl = NULL;
-	msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s():  successfully (Mutex ID '%u')\n",__func__, mutex_id);
+    msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s():  successfully\n",__func__);
 	return EOK;
 
 	ERR_0:
@@ -904,11 +902,7 @@ int lib_thread__signal_destroy (signal_hdl_t *_hdl)
 		}
 	}
 
-	signal_id = &(*_hdl)->cond_hdl;
-
-
-
-	ret = pthread_cond_destroy(&(*_hdl)->cond_hdl);
+    ret = pthread_cond_destroy(&(*_hdl)->cond_hdl);
 	if (ret != 0) {
 		ret = convert_std_errno(ret);
 		(*_hdl)->destroy_active = 0;
@@ -931,7 +925,7 @@ int lib_thread__signal_destroy (signal_hdl_t *_hdl)
 
 	free(*_hdl);
 	*_hdl = NULL;
-	msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s(): successfully (Signal ID '%u')\n",__func__, signal_id);
+    msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s(): successfully\n",__func__);
 	return EOK;
 
 	ERR_1:
@@ -1010,7 +1004,7 @@ int lib_thread__signal_send (signal_hdl_t _hdl)
 	/* Check if somebody is waiting for signal */
 
 
-	msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s():  successfully (Signal ID '%u')\n",__func__, (unsigned int)&_hdl->cond_hdl);
+    msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s():  successfully \n",__func__);
 	return EOK;
 
 	ERR_1:
@@ -1038,7 +1032,6 @@ int lib_thread__signal_send (signal_hdl_t _hdl)
 int lib_thread__signal_wait (signal_hdl_t _hdl)
 {
 	int ret, mtx_ret;
-	unsigned int signal_id;
 
 	if (_hdl == NULL) {
 		ret = -EPAR_NULL;
@@ -1062,9 +1055,7 @@ int lib_thread__signal_wait (signal_hdl_t _hdl)
 		/*Set a cleanup handler to threat the thread cancellation */
 		pthread_cleanup_push(&lib_thread__signal_pthread_cancel_handler, _hdl);
 
-		signal_id = &_hdl->cond_hdl;
-
-		/* A check if the thread unblocking was no spurious wakeup*/
+        /* A check if the thread unblocking was no spurious wakeup*/
 		while (1)
 		{
 			ret = pthread_cond_wait(&_hdl->cond_hdl, &_hdl->mtx_hdl);
@@ -1099,10 +1090,10 @@ int lib_thread__signal_wait (signal_hdl_t _hdl)
 
 	switch (ret) {
 		case EOK :
-			msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s(): unblocked successfully (Signal ID '%u')\n",__func__, signal_id);
+            msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s(): unblocked successfully \n",__func__);
 			break;
 		case -ESTD_PERM :
-			msg (LOG_LEVEL_debug_prio_2, LIB_THREAD_MODULE_ID, "%s(): unblocked destroyed (Signal ID '%u')\n",__func__, signal_id);
+            msg (LOG_LEVEL_debug_prio_2, LIB_THREAD_MODULE_ID, "%s(): unblocked destroyed \n",__func__);
 			break;
 		default :
 			goto ERR_0;
@@ -1260,7 +1251,7 @@ int lib_thread__sem_init (sem_hdl_t *_hdl, int _count)
 	}
 
 	*_hdl = hdl;
-	msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "lib_thread__sem_init :  successfully (Semaphore ID '%u')\n", (unsigned int)&(*_hdl)->sem_hdl);
+    msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "lib_thread__sem_init :  successfully\n");
 	return EOK;
 
 	ERR_1:
@@ -1289,7 +1280,6 @@ int lib_thread__sem_init (sem_hdl_t *_hdl, int _count)
 int lib_thread__sem_destroy (sem_hdl_t *_hdl)
 {
 	int ret;
-	unsigned int sem_id;
 
 	if (_hdl == NULL) {
 		ret = -EPAR_NULL;
@@ -1301,8 +1291,6 @@ int lib_thread__sem_destroy (sem_hdl_t *_hdl)
 		goto ERR_0;
 	}
 
-	sem_id = (unsigned int)&(*_hdl)->sem_hdl;
-
 	if (sem_destroy(&(*_hdl)->sem_hdl) != 0) {
 		ret = convert_std_errno(errno);
 		goto ERR_0;
@@ -1310,7 +1298,7 @@ int lib_thread__sem_destroy (sem_hdl_t *_hdl)
 
 	free(*_hdl);
 	*_hdl = NULL;
-	msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s():  successfully (Semaphore ID '%u')\n",__func__, sem_id);
+    msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s():  successfully\n",__func__);
 
 
 	return EOK;
@@ -1348,7 +1336,7 @@ int lib_thread__sem_post (sem_hdl_t _hdl)
 		goto ERR_0;
 	}
 
-	msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s():  successfully (Semaphore ID '%u')\n",__func__, (unsigned int)&_hdl->sem_hdl);
+    msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s():  successfully\n",__func__);
 
 	return EOK;
 
@@ -1384,7 +1372,7 @@ int lib_thread__sem_wait (sem_hdl_t _hdl)
 		goto ERR_0;
 	}
 
-	msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s():  successfully (Semaphore ID '%u')\n",__func__, (unsigned int)&_hdl->sem_hdl);
+    msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s():  successfully\n",__func__);
 
 	return EOK;
 
@@ -1463,7 +1451,7 @@ int lib_thread__sem_trywait (sem_hdl_t _hdl)
 		goto ERR_0;
 	}
 
-	msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s():  successfully (Semaphore ID '%u')\n",__func__, (unsigned int)&_hdl->sem_hdl);
+    msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s():  successfully\n",__func__);
 
 	return EOK;
 
@@ -1525,7 +1513,7 @@ int lib_thread__cond_init(cond_hdl_t *_hdl)
 		goto ERR_2;
 	}
 	*_hdl = hdl;
-	msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s() :  successfully (Semaphore ID '%u')\n",__func__, (unsigned int)&(*_hdl)->cond);
+    msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s() :  successfully\n",__func__);
 	return EOK;
 
 	ERR_2:
