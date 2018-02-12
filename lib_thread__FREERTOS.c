@@ -11,7 +11,8 @@
 /*
  *	******************************* change log *******************************
  *  date			user			comment
- * 	16 Apr 2015			schmied			- creation of lib_thread__FREERTOS.c
+ * 	16 Apr 2016		Thomas			- creation of lib_thread__FREERTOS.c
+ * 	12 Feb 2018		Thoma			- Adjust to new errno style
  *  
  */
 
@@ -21,15 +22,21 @@
  * includes
  * ******************************************************************/
 
+/* c-runtime */
 #include <stdint.h>
-#include <lib_convention__errno.h>
-
-#include <string.h>
 #include <errno.h>
+#include <string.h>
+
+/* system */
 #include <FreeRTOS.h>
 #include <semphr.h>
 #include <task.h>
+
+/* framework */
+#include <lib_convention__errno.h>
 #include <lib_log.h>
+
+/* project */
 //#include <stm32f1xx_hal_def.h>
 #include "lib_thread.h" /* interface  */
 
@@ -177,7 +184,7 @@ int lib_thread__create (thread_hdl_t *_hdl, thread_worker_t *_worker, void *_arg
 			/* get the priority of the current task */
 			prio =  uxTaskPriorityGet(NULL) +_relative_priority;
 			if (prio > configMAX_PRIORITIES) {
-				ret = -ERANGE;
+				ret = -ESTD_RANGE;
 			}
 		}
 	}
@@ -187,7 +194,7 @@ int lib_thread__create (thread_hdl_t *_hdl, thread_worker_t *_worker, void *_arg
 		hdl = pvPortMalloc(sizeof(struct thread_hdl_attr));
 		thunk_attr = pvPortMalloc(sizeof(struct thunk_task_attr));
 		if((hdl == NULL) || (thunk_attr == NULL)){
-			ret = -ENOMEM;
+			ret = -ESTD_NOMEM;
 		}
 		else {
 			ret = EOK;
@@ -213,8 +220,8 @@ int lib_thread__create (thread_hdl_t *_hdl, thread_worker_t *_worker, void *_arg
 		ret = (int)xTaskCreate(&thunk_lib_thread__taskprocessing, _thread_name, configMINIMAL_STACK_SIZE, (void*)thunk_attr, prio, &hdl->rtos_thd_handle);
 		switch (ret) {
 			case pdPASS 								: ret = EOK; break;
-			case errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY	: ret = -ENOMEM; break;
-			default										: ret = -EFAULT; break;
+			case errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY	: ret = -ESTD_NOMEM; break;
+			default										: ret = -ESTD_FAULT; break;
 		}
 		*_hdl = hdl;
 	}
@@ -261,7 +268,7 @@ int lib_thread__join (thread_hdl_t *_hdl, void **_ret_val)
 		ret = xSemaphoreTake((*_hdl)->thunk_attr->sem_finish, portMAX_DELAY);
 		switch (ret) {
 			case pdPASS : ret = EOK; break;
-			case pdFALSE : ret = -EFAULT; break;
+			case pdFALSE : ret = -ESTD_FAULT; break;
 		}
 		if(_ret_val != NULL) {
 			*_ret_val = (*_hdl)->thunk_attr->retval;
@@ -315,7 +322,7 @@ int lib_thread__cancel(thread_hdl_t _hdl)
 		/* cancel thread */
 		vTaskSuspendAll ();
 		if(_hdl->thunk_attr->expired_thread_id != 0) {
-			ret = -EBUSY;
+			ret = -ESTD_BUSY;
 		}
 		else {
 			_hdl->thunk_attr->expired_thread_id = (unsigned int)_hdl->rtos_thd_handle;
@@ -409,7 +416,7 @@ int lib_thread__mutex_init (mutex_hdl_t *_hdl)
 	if (ret == EOK) {
 		mtx_hdl = pvPortMalloc(sizeof(struct mutex_hdl_attr));
 		if (mtx_hdl == NULL) {
-			ret = -ENOMEM;
+			ret = -ESTD_NOMEM;
 		} else {
 			*_hdl = mtx_hdl;
 			ret = EOK;
@@ -472,7 +479,7 @@ int lib_thread__mutex_destroy (mutex_hdl_t *_hdl)
 	if (taskhandle == NULL) {
 		ret = EOK;
 	} else {
-		ret = -EBUSY;
+		ret = -ESTD_BUSY;
 	}
 
 	if (ret == EOK) {
@@ -566,7 +573,7 @@ int lib_thread__mutex_unlock (mutex_hdl_t _hdl)
 	ret = (int)xSemaphoreGive(_hdl->rtos_mtx_hdl);
 	switch (ret) {
 		case pdPASS : ret = EOK; break;
-		case pdFALSE : ret = -EFAULT; break;
+		case pdFALSE : ret = -ESTD_FAULT; break;
 	}
 
 	if (ret == EOK) {
@@ -588,7 +595,7 @@ int lib_thread__mutex_unlock (mutex_hdl_t _hdl)
  *
  * ---------
  * \return	'0', if successful, < '0' if not successful
- * 			+ '-EBUSY', in case it is already locked
+ * 			+ '-ESTD_BUSY', in case it is already locked
  * ******************************************************************/
 int lib_thread__mutex_trylock (mutex_hdl_t _hdl)
 {
@@ -611,14 +618,14 @@ int lib_thread__mutex_trylock (mutex_hdl_t _hdl)
 		ret = EOK;
 	}
 	else {
-		ret = -EBUSY;
+		ret = -ESTD_BUSY;
 	}
 
 	if(ret == EOK) {
 		ret = (int)xSemaphoreTake(_hdl->rtos_mtx_hdl, portMAX_DELAY);
 		if (ret == pdFALSE) { /* mutex could not be obtained */
 		/* map this value to the one specified within the POSIX publication */
-			ret = -EFAULT;
+			ret = -ESTD_FAULT;
 		} else {
 			ret = EOK;
 		}
@@ -665,7 +672,7 @@ int lib_thread__signal_init (signal_hdl_t *_hdl)
 	if (ret == EOK) {
 		sgn_hdl = pvPortMalloc(sizeof(struct signal_hdl_attr));
 		if (sgn_hdl == NULL) {
-			ret = -ENOMEM;
+			ret = -ESTD_NOMEM;
 		} else {
 			sgn_hdl->destroy=0;
 			ret = EOK;
@@ -676,7 +683,7 @@ int lib_thread__signal_init (signal_hdl_t *_hdl)
 
 		sgn_hdl->rtos_sgn_hdl = xQueueCreate(5, sizeof(uint32_t));
 		if(sgn_hdl->rtos_sgn_hdl == NULL) {
-			ret = -ENOMEM;
+			ret = -ESTD_NOMEM;
 		}
 		else {
 			*_hdl = sgn_hdl;
@@ -729,7 +736,7 @@ int lib_thread__signal_destroy (signal_hdl_t *_hdl)
 		ret = EOK;
 	}
 	else {
-		ret = -EFAULT;
+		ret = -ESTD_FAULT;
 	}
 
 	if(ret == EOK) {
@@ -794,7 +801,7 @@ int lib_thread__signal_send (signal_hdl_t _hdl)
 	dequeue_attr = DEQUEUE_ATTR_rcv;
 	ret = xQueueSend( _hdl->rtos_sgn_hdl , &dequeue_attr, 0);
 	if (ret != pdPASS ) {
-		ret = -EFAULT;
+		ret = -ESTD_FAULT;
 	}
 	else {
 		ret = EOK;
@@ -833,8 +840,8 @@ int lib_thread__signal_wait (signal_hdl_t _hdl)
 	ret_val = xQueueReceive( _hdl->rtos_sgn_hdl, &dequeue_attr, portMAX_DELAY);
 	switch(ret_val){
 		case pdPASS : ret = EOK; break;
-		case errQUEUE_EMPTY: ret = -ETIME_OUT; break;
-		default : ret = -EFAULT; break;
+		case errQUEUE_EMPTY: ret = -EEXEC_TO; break;
+		default : ret = -ESTD_FAULT; break;
 
 	}
 
@@ -876,8 +883,8 @@ int lib_thread__signal_wait_timedwait (signal_hdl_t _hdl, unsigned int _millisec
 	ret_val = xQueueReceive( _hdl->rtos_sgn_hdl, &dequeue_attr, ( portTickType )_milliseconds / portTICK_PERIOD_MS);
 	switch(ret_val){
 		case pdPASS : ret = EOK; break;
-		case errQUEUE_EMPTY: ret = -ETIME_OUT; break;
-		default : ret = -EFAULT; break;
+		case errQUEUE_EMPTY: ret = -EEXEC_TO; break;
+		default : ret = -ESTD_FAULT; break;
 
 	}
 
@@ -917,7 +924,7 @@ int lib_thread__sem_init (sem_hdl_t *_hdl, int _count)
 
 	sem_hdl = pvPortMalloc(sizeof(struct sem_hdl_attr));
 	if (sem_hdl == NULL) {
-		ret = -ENOMEM;
+		ret = -ESTD_NOMEM;
 	} else {
 		*_hdl = sem_hdl;
 		ret = EOK;
@@ -1019,7 +1026,7 @@ int lib_thread__sem_post (sem_hdl_t _hdl)
 	}
 
 	if (ret != pdPASS ) {
-		ret = -EFAULT;
+		ret = -ESTD_FAULT;
 	}
 	else {
 		ret = EOK;
@@ -1057,8 +1064,8 @@ int lib_thread__sem_wait (sem_hdl_t _hdl)
 	ret_val = xSemaphoreTake(_hdl->rtos_sem_hdl, portMAX_DELAY);
 	switch(ret_val){
 		case pdPASS : ret = EOK; break;
-		case errQUEUE_EMPTY: ret = -ETIME_OUT; break;
-		default : ret = -EFAULT; break;
+		case errQUEUE_EMPTY: ret = -EEXEC_TO; break;
+		default : ret = -ESTD_FAULT; break;
 
 	}
 	return ret;
@@ -1092,8 +1099,8 @@ int lib_thread__sem_trywait (sem_hdl_t _hdl)
 	ret_val = xSemaphoreTake(_hdl->rtos_sem_hdl, 0);
 	switch(ret_val){
 		case pdPASS : ret = EOK; break;
-		case errQUEUE_EMPTY: ret = -ETIME_OUT; break;
-		default : ret = -EFAULT; break;
+		case errQUEUE_EMPTY: ret = -EEXEC_TO; break;
+		default : ret = -ESTD_FAULT; break;
 
 	}
 

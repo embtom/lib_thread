@@ -141,7 +141,7 @@ static void *signal_waiter (void *_arg)
 		count++;
 	}
 
-	if (ret == -ETIME_OUT)
+	if (ret == -EEXEC_TO)
 	{
 		msg(LOG_LEVEL_info, "main","%s:signal_waiter returns timeout\n",name);
 	}
