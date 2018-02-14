@@ -1,4 +1,4 @@
-project(lib_thread)
+project(lib_thread_FREERTOS)
 
 #However, the file(GLOB...) allows for wildcard additions:
 file(GLOB SOURCES "*.c")
