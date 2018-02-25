@@ -45,7 +45,7 @@
  * defines
  * ******************************************************************/
 
-#define M_LIB_THREAD__MODULE_NAME 	"LIB_THD"
+#define M_LIB_THREAD__MODULE_ID 	"LIB_THD"
 
 /* *******************************************************************
  * custom data types (e.g. enumerations, structures, unions)
@@ -115,7 +115,7 @@ static void thunk_lib_thread__taskprocessing(void * _arg);
  * \brief	Initialization of the lib_thread
  * ---------
  * \remark  The call of the init routine is only be allowed at the main
- * 			routine of a process
+ * 			routine of a procesM_LIB_THREAD__MODULE_IDs
  * ---------
  *
  * \param	_sched : Set scheduling mode of the actual calling process
@@ -170,68 +170,67 @@ int lib_thread__create (thread_hdl_t *_hdl, thread_worker_t *_worker, void *_arg
 	 * ******************************************************************/
 	if ((_hdl == NULL) || (_worker == NULL)) {
 		ret = -EPAR_NULL;
-	} else {
-		ret = EOK;
+		goto ERR_0;
 	}
 
-	if (ret == EOK) {
-
-		//if (pxCurrentTCB == 0) {
-		if(xTaskGetCurrentTaskHandle()==NULL) {
-			prio = _relative_priority;
-		}
-		else {
-			/* get the priority of the current task */
-			prio =  uxTaskPriorityGet(NULL) +_relative_priority;
-			if (prio > configMAX_PRIORITIES) {
-				ret = -ESTD_RANGE;
-			}
+	if(xTaskGetCurrentTaskHandle()==NULL) {
+		prio = _relative_priority;
+	}
+	else {
+		/* get the priority of the current task */
+		prio =  uxTaskPriorityGet(NULL) +_relative_priority;
+		if (prio > configMAX_PRIORITIES) {
+			ret = -EPAR_RANGE;
+			goto ERR_0;
 		}
 	}
 
-	if (ret == EOK) {
-		/* allocate memory in order to store handles and further parameters */
-		hdl = pvPortMalloc(sizeof(struct thread_hdl_attr));
-		thunk_attr = pvPortMalloc(sizeof(struct thunk_task_attr));
-		if((hdl == NULL) || (thunk_attr == NULL)){
-			ret = -ESTD_NOMEM;
-		}
-		else {
-			ret = EOK;
-		}
+	/* allocate memory in order to store handles and further parameters */
+	hdl = pvPortMalloc(sizeof(struct thread_hdl_attr));
+	thunk_attr = pvPortMalloc(sizeof(struct thunk_task_attr));
+	if((hdl == NULL) || (thunk_attr == NULL)){
+		ret = -ESTD_NOMEM;
+		goto ERR_1;
 	}
 
-	if (ret == EOK) {
-		thunk_attr->sem_finish = xSemaphoreCreateCounting(255, 0);
-		if(thunk_attr->sem_finish == NULL) {
-			ret = -EAGAIN;
-		}
-		else {
-			thunk_attr->arg = _arg;
-			thunk_attr->worker = _worker;
-			thunk_attr->expired_thread_id = 0;
-			hdl->thunk_attr = thunk_attr;
-
-			ret = EOK;
-		}
+	thunk_attr->sem_finish = xSemaphoreCreateCounting(255, 0);
+	if(thunk_attr->sem_finish == NULL) {
+		ret = -EAGAIN;
+	}
+	else {
+		thunk_attr->arg = _arg;
+		thunk_attr->worker = _worker;
+		thunk_attr->expired_thread_id = 0;
+		hdl->thunk_attr = thunk_attr;
 	}
 
-	if (ret == EOK) {
-		ret = (int)xTaskCreate(&thunk_lib_thread__taskprocessing, _thread_name, configMINIMAL_STACK_SIZE, (void*)thunk_attr, prio, &hdl->rtos_thd_handle);
-		switch (ret) {
-			case pdPASS 								: ret = EOK; break;
-			case errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY	: ret = -ESTD_NOMEM; break;
-			default										: ret = -ESTD_FAULT; break;
-		}
-		*_hdl = hdl;
+	ret = (int)xTaskCreate(&thunk_lib_thread__taskprocessing, _thread_name, configMINIMAL_STACK_SIZE, (void*)thunk_attr, prio, &hdl->rtos_thd_handle);
+	switch (ret) {
+		case pdPASS 								: ret = EOK; break;
+		case errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY	: ret = -ESTD_NOMEM; break;
+		default										: ret = -ESTD_FAULT; break;
 	}
 
-	if (ret == EOK) {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_NAME, "create(): successfully (Thread ID '%u' Name '%s')", hdl->rtos_thd_handle, _thread_name);
-	} else {
-		lib_thread__join(_hdl, NULL);
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_NAME, "create(): failed with errror code %i", ret);
+	*_hdl = hdl;
+	return EOK;
+
+	ERR_1:
+
+	if (hdl != NULL) {
+		vPortFree(hdl);
 	}
+
+	if(thunk_attr != NULL) {
+		vPortFree(thunk_attr);
+	}
+
+	ERR_0:
+	msg (LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "%s(): failed with retval %i\n",__func__, ret );
+
+	if (_hdl != NULL) {
+		*_hdl = NULL;
+	}
+
 	return ret;
 }
 
@@ -252,6 +251,7 @@ int lib_thread__join (thread_hdl_t *_hdl, void **_ret_val)
 	/* *******************************************************************
 	 * >>>>>	locals 	<<<<<<
 	 * ******************************************************************/
+	TaskHandle_t current_thd;
 	int expired_thread_id = 0;
 	int ret;
 
@@ -260,36 +260,44 @@ int lib_thread__join (thread_hdl_t *_hdl, void **_ret_val)
 	 * ******************************************************************/
 	if ((_hdl == NULL) || (*_hdl == NULL)) {
 		ret = -EPAR_NULL;
-	} else {
-		ret = EOK;
+		goto ERR_0;
 	}
 
-	if ((ret == EOK) && ((*_hdl)->rtos_thd_handle != NULL)){
-		ret = xSemaphoreTake((*_hdl)->thunk_attr->sem_finish, portMAX_DELAY);
-		switch (ret) {
-			case pdPASS : ret = EOK; break;
-			case pdFALSE : ret = -ESTD_FAULT; break;
-		}
-		if(_ret_val != NULL) {
-			*_ret_val = (*_hdl)->thunk_attr->retval;
-		}
+	current_thd = xTaskGetCurrentTaskHandle();
+	/*check if current running context tries to join */
+	if((*_hdl)->rtos_thd_handle == current_thd) {
+		ret = -EEXEC_DEADLK;
+		goto ERR_0;
 	}
 
-	if (ret == EOK) {
-		vSemaphoreDelete((*_hdl)->thunk_attr->sem_finish);
-		expired_thread_id= (*_hdl)->thunk_attr->expired_thread_id;
-		vPortFree((*_hdl)->thunk_attr);
-		vPortFree(*_hdl);
-		*_hdl = NULL;
+	if ((*_hdl)->rtos_thd_handle == NULL) {
+		ret = -ESTD_FAULT;
+		goto ERR_0;
 	}
 
-
-	if (ret == EOK) {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_NAME, "join(): successful (Thread ID '%u')", expired_thread_id);
-	} else {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_NAME, "join(): failed with errror code %i", ret);
+	ret = xSemaphoreTake((*_hdl)->thunk_attr->sem_finish, portMAX_DELAY);
+	switch (ret) {
+		case pdPASS : ret = EOK; break;
+		case pdFALSE : ret = -ESTD_FAULT; break;
 	}
+	if(_ret_val != NULL) {
+		*_ret_val = (*_hdl)->thunk_attr->retval;
+	}
+
+	vSemaphoreDelete((*_hdl)->thunk_attr->sem_finish);
+	expired_thread_id= (*_hdl)->thunk_attr->expired_thread_id;
+	vPortFree((*_hdl)->thunk_attr);
+	vPortFree(*_hdl);
+	*_hdl = NULL;
+
+	msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "join(): successful (Thread ID '%u')", expired_thread_id);
+
+	return EOK;
+
+	ERR_0:
+	msg(LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "join(): failed with errror code %i", ret);
 	return ret;
+
 }
 
 /* *******************************************************************
@@ -333,9 +341,9 @@ int lib_thread__cancel(thread_hdl_t _hdl)
 	}
 
 	if (ret == EOK) {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_NAME, "cancel(): successul (Thread ID '%u')",_hdl->thunk_attr->expired_thread_id);
+		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "cancel(): successul (Thread ID '%u')",_hdl->thunk_attr->expired_thread_id);
 	} else {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_NAME, "cancel(): failed with errror code %i", ret);
+		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "cancel(): failed with errror code %i", ret);
 	}
 	return -ret;
 }
@@ -362,25 +370,25 @@ int lib_thread__getname(thread_hdl_t _hdl, char * _name, int _maxlen)
 	 * >>>>>	start of code section			<<<<<<
 	 * ******************************************************************/
 	if (_hdl == NULL){
-		return -EPAR_NULL;
+		ret = -EPAR_NULL;
+		goto ERR_0;
 	}
 
 	name = pcTaskGetTaskName(_hdl->rtos_thd_handle);
 	if(name == NULL) {
-		ret = -ENOENT;
+		ret = -ESTD_SRCH;
+		goto ERR_0;
 	}
 
-	if(ret == EOK) {
-		strncpy(_name, name, (_maxlen-1));
-		_name[_maxlen-1] = 0;  // Ensure a null termination of the string
-	}
+	strncpy(_name, name, (_maxlen-1));
+	_name[_maxlen-1] = 0;  // Ensure a null termination of the string
 
-	ret = EOK;
-	if (ret == EOK) {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_NAME, "getname(): successul");
-	} else {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_NAME, "getname(): failed with errror code %i", ret);
-	}
+
+	msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "getname(): successully");
+	return EOK;
+
+	ERR_0:
+	msg(LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "getname(): failed with errror code %i", ret);
 	return ret;
 }
 
@@ -433,9 +441,9 @@ int lib_thread__mutex_init (mutex_hdl_t *_hdl)
 		}
 	}
 	if (ret == EOK) {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_NAME, "mutex_init(): successul (ID:'%u')", mtx_hdl->rtos_mtx_hdl);
+		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "mutex_init(): successul (ID:'%u')", mtx_hdl->rtos_mtx_hdl);
 	} else {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_NAME, "mutex_init(): failed with errror code %i", ret);
+		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "mutex_init(): failed with errror code %i", ret);
 	}
 	return ret;
 }
@@ -492,9 +500,9 @@ int lib_thread__mutex_destroy (mutex_hdl_t *_hdl)
 	taskEXIT_CRITICAL();
 
 	if (ret == EOK) {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_NAME, "mutex_destroy(): successul (ID:'%u')",mtx_id);
+		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "mutex_destroy(): successul (ID:'%u')",mtx_id);
 	} else {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_NAME, "mutex_destroy(): failed with errror code %i", ret);
+		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "mutex_destroy(): failed with errror code %i", ret);
 	}
 	return ret;
 }
@@ -535,9 +543,9 @@ int lib_thread__mutex_lock (mutex_hdl_t _hdl)
 	}
 
 	if (ret == EOK) {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_NAME, "mutex_lock(): successul (ID:'%u')", _hdl->rtos_mtx_hdl);
+		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "mutex_lock(): successul (ID:'%u')", _hdl->rtos_mtx_hdl);
 	} else {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_NAME, "mutex_lock(): failed with errror code %i", ret);
+		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "mutex_lock(): failed with errror code %i", ret);
 	}
 
 	return ret;
@@ -577,9 +585,9 @@ int lib_thread__mutex_unlock (mutex_hdl_t _hdl)
 	}
 
 	if (ret == EOK) {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_NAME, "mutex_unlock(): successul (ID:'%u')", _hdl->rtos_mtx_hdl);
+		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "mutex_unlock(): successul (ID:'%u')", _hdl->rtos_mtx_hdl);
 	} else {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_NAME, "mutex_unlock(): failed with errror code %i", ret);
+		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "mutex_unlock(): failed with errror code %i", ret);
 	}
 
 	return ret;
@@ -633,9 +641,9 @@ int lib_thread__mutex_trylock (mutex_hdl_t _hdl)
 	taskEXIT_CRITICAL();
 
 	if (ret == EOK) {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_NAME, "mutex_trylock(): successul (ID:'%u')", _hdl->rtos_mtx_hdl);
+		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "mutex_trylock(): successul (ID:'%u')", _hdl->rtos_mtx_hdl);
 	} else {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_NAME, "mutex_trylock(): failed with error code %i", ret);
+		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "mutex_trylock(): failed with error code %i", ret);
 	}
 
 	return ret;
@@ -692,9 +700,9 @@ int lib_thread__signal_init (signal_hdl_t *_hdl)
 	}
 
 	if (ret == EOK) {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_NAME, "signal_init(): successul");
+		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "signal_init(): successul");
 	} else {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_NAME, "signal_init(): failed with errror code %i", ret);
+		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "signal_init(): failed with errror code %i", ret);
 	}
 	return ret;
 }
@@ -747,9 +755,9 @@ int lib_thread__signal_destroy (signal_hdl_t *_hdl)
 	}
 
 	if (ret == EOK) {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_NAME, "signal_destroy(): successul");
+		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "signal_destroy(): successul");
 	} else {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_NAME, "signal_destroy(): failed with errror code %i", ret);
+		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "signal_destroy(): failed with errror code %i", ret);
 	}
 	return ret;
 }
@@ -939,9 +947,9 @@ int lib_thread__sem_init (sem_hdl_t *_hdl, int _count)
 		}
 	}
 	if (ret == EOK) {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_NAME, "sem_init(): successul");
+		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "sem_init(): successul");
 	} else {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_NAME, "sem_init(): failed with errror code %i", ret);
+		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "sem_init(): failed with errror code %i", ret);
 	}
 	return ret;
 }
@@ -985,9 +993,9 @@ int lib_thread__sem_destroy (sem_hdl_t *_hdl)
 	}
 	/* destroy queue element */
 	if (ret == EOK) {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_NAME, "sem_destroy(): successul");
+		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "sem_destroy(): successul");
 	} else {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_NAME, "sem_destroy(): failed with errror code %i", ret);
+		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "sem_destroy(): failed with errror code %i", ret);
 	}
 	return ret;
 }
