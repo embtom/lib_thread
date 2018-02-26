@@ -225,7 +225,7 @@ int lib_thread__create (thread_hdl_t *_hdl, thread_worker_t *_worker, void *_arg
 	}
 
 	ERR_0:
-	msg (LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "%s(): failed with retval %i\n",__func__, ret );
+	msg (LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "%s(): failed with retval %i",__func__, ret );
 
 	if (_hdl != NULL) {
 		*_hdl = NULL;
@@ -258,8 +258,13 @@ int lib_thread__join (thread_hdl_t *_hdl, void **_ret_val)
 	/* *******************************************************************
 	 * >>>>>	start of code section			<<<<<<
 	 * ******************************************************************/
-	if ((_hdl == NULL) || (*_hdl == NULL)) {
+	if (_hdl == NULL) {
 		ret = -EPAR_NULL;
+		goto ERR_0;
+	}
+
+	if (*_hdl == NULL){
+		ret = -ESTD_SRCH;
 		goto ERR_0;
 	}
 
@@ -280,6 +285,11 @@ int lib_thread__join (thread_hdl_t *_hdl, void **_ret_val)
 		case pdPASS : ret = EOK; break;
 		case pdFALSE : ret = -ESTD_FAULT; break;
 	}
+
+	if (ret < EOK) {
+		goto ERR_0;
+	}
+
 	if(_ret_val != NULL) {
 		*_ret_val = (*_hdl)->thunk_attr->retval;
 	}
@@ -297,7 +307,6 @@ int lib_thread__join (thread_hdl_t *_hdl, void **_ret_val)
 	ERR_0:
 	msg(LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "join(): failed with errror code %i", ret);
 	return ret;
-
 }
 
 /* *******************************************************************
@@ -322,30 +331,28 @@ int lib_thread__cancel(thread_hdl_t _hdl)
 	/* check argument */
 	if (_hdl == NULL) {
 		ret = -EPAR_NULL;
-	} else {
-		ret = EOK;
+		goto ERR_0;
 	}
 
-	if (ret == EOK) {
-		/* cancel thread */
-		vTaskSuspendAll ();
-		if(_hdl->thunk_attr->expired_thread_id != 0) {
-			ret = -ESTD_BUSY;
-		}
-		else {
-			_hdl->thunk_attr->expired_thread_id = (unsigned int)_hdl->rtos_thd_handle;
-			vTaskDelete(_hdl->rtos_thd_handle);
-			_hdl->rtos_thd_handle = NULL;
-		}
-		xTaskResumeAll ();
+	/* cancel thread */
+	vTaskSuspendAll ();
+	if(_hdl->thunk_attr->expired_thread_id != 0) {
+		ret = -ESTD_BUSY;
+		goto ERR_0;
 	}
 
-	if (ret == EOK) {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "cancel(): successul (Thread ID '%u')",_hdl->thunk_attr->expired_thread_id);
-	} else {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "cancel(): failed with errror code %i", ret);
-	}
-	return -ret;
+	_hdl->thunk_attr->expired_thread_id = (unsigned int)_hdl->rtos_thd_handle;
+	vTaskDelete(_hdl->rtos_thd_handle);
+	_hdl->rtos_thd_handle = NULL;
+	xTaskResumeAll ();
+
+	msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "cancel(): successul (Thread ID '%u')",_hdl->thunk_attr->expired_thread_id);
+
+	return EOK;
+
+	ERR_0:
+	msg(LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "cancel(): failed with errror code %i", ret);
+	return ret;
 }
 
 /* *******************************************************************
@@ -365,11 +372,12 @@ int lib_thread__getname(thread_hdl_t _hdl, char * _name, int _maxlen)
 	 * >>>>>	locals 	<<<<<<
 	 * ******************************************************************/
 	int ret = EOK;
+	int name_length;
 	char *name;
 	/* *******************************************************************
 	 * >>>>>	start of code section			<<<<<<
 	 * ******************************************************************/
-	if (_hdl == NULL){
+	if ((_hdl == NULL) || (_name == NULL)) {
 		ret = -EPAR_NULL;
 		goto ERR_0;
 	}
@@ -380,9 +388,14 @@ int lib_thread__getname(thread_hdl_t _hdl, char * _name, int _maxlen)
 		goto ERR_0;
 	}
 
+	name_length = strlen(name) +1;
+	if(name_length > _maxlen) {
+		ret = -ESTD_RANGE;
+		goto ERR_0;
+	}
+
 	strncpy(_name, name, (_maxlen-1));
 	_name[_maxlen-1] = 0;  // Ensure a null termination of the string
-
 
 	msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "getname(): successully");
 	return EOK;
@@ -417,34 +430,32 @@ int lib_thread__mutex_init (mutex_hdl_t *_hdl)
 	 * ******************************************************************/
 	if (_hdl == NULL) {
 		ret = -EPAR_NULL;
-	} else {
-		ret = EOK;
+		goto ERR_0;
 	}
 
-	if (ret == EOK) {
-		mtx_hdl = pvPortMalloc(sizeof(struct mutex_hdl_attr));
-		if (mtx_hdl == NULL) {
-			ret = -ESTD_NOMEM;
-		} else {
-			*_hdl = mtx_hdl;
-			ret = EOK;
-		}
+	mtx_hdl = pvPortMalloc(sizeof(struct mutex_hdl_attr));
+	if (mtx_hdl == NULL) {
+		ret = -ESTD_NOMEM;
+		goto ERR_0;
 	}
 
-	if (ret == EOK) {
-		/* alloc memory in order to create a mutex */
-		mtx_hdl->rtos_mtx_hdl = xSemaphoreCreateMutex();
-		if (mtx_hdl->rtos_mtx_hdl == NULL) {
-			/* cleanup memory */
-			vPortFree(mtx_hdl);
-			ret = -EINVAL;
-		}
+	/* alloc memory in order to create a mutex */
+	mtx_hdl->rtos_mtx_hdl = xSemaphoreCreateMutex();
+	if (mtx_hdl->rtos_mtx_hdl == NULL) {
+		/* cleanup memory */
+		ret = -ESTD_FAULT;
+		goto ERR_1;
 	}
-	if (ret == EOK) {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "mutex_init(): successul (ID:'%u')", mtx_hdl->rtos_mtx_hdl);
-	} else {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "mutex_init(): failed with errror code %i", ret);
-	}
+
+	*_hdl = mtx_hdl;
+	msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "mutex_init(): successul (ID:'%u')", mtx_hdl->rtos_mtx_hdl);
+	return EOK;
+
+	ERR_1:
+	vPortFree(mtx_hdl);
+
+	ERR_0:
+	msg(LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "mutex_init(): failed with errror code %i", ret);
 	return ret;
 }
 
@@ -573,23 +584,29 @@ int lib_thread__mutex_unlock (mutex_hdl_t _hdl)
 	 * >>>>>	start of code section			<<<<<<
 	 * ******************************************************************/
 	if (_hdl == NULL){
-		return -EPAR_NULL;
+		ret = -EPAR_NULL;
+		goto ERR_0;
 	}
+
 	if (_hdl->rtos_mtx_hdl == NULL) {
-		return -EINVAL;
+		ret = -ESTD_PERM;
+		goto ERR_0;
 	}
+
 	ret = (int)xSemaphoreGive(_hdl->rtos_mtx_hdl);
 	switch (ret) {
 		case pdPASS : ret = EOK; break;
-		case pdFALSE : ret = -ESTD_FAULT; break;
+		case pdFALSE : ret = -ESTD_PERM; break;
+	}
+	if (ret < EOK) {
+		goto ERR_0;
 	}
 
-	if (ret == EOK) {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "mutex_unlock(): successul (ID:'%u')", _hdl->rtos_mtx_hdl);
-	} else {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "mutex_unlock(): failed with errror code %i", ret);
-	}
+	msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "mutex_unlock(): successul (ID:'%u')", _hdl->rtos_mtx_hdl);
+	return EOK;
 
+	ERR_0:
+	msg(LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "mutex_unlock(): failed with errror code %i", ret);
 	return ret;
 }
 
