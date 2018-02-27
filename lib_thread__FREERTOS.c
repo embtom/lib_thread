@@ -535,30 +535,44 @@ int lib_thread__mutex_lock (mutex_hdl_t _hdl)
 	 * >>>>>	locals 	<<<<<<
 	 * ******************************************************************/
 	int ret;
+	TaskHandle_t current_thd, mtx_owner_thd;
 
 	/* *******************************************************************
 	 * >>>>>	start of code section								<<<<<<
 	 * ******************************************************************/
 	if (_hdl == NULL){
-		return -EPAR_NULL;
+		ret = -EPAR_NULL;
+		goto ERR_0;
 	}
+
 	if (_hdl->rtos_mtx_hdl == NULL) {
-		return -EINVAL;
+		ret = -ESTD_INVAL;
+		goto ERR_0;
 	}
+
+	current_thd = xTaskGetCurrentTaskHandle();
+	mtx_owner_thd = xSemaphoreGetMutexHolder(_hdl->rtos_mtx_hdl);
+	if(current_thd==mtx_owner_thd) {
+		ret = -EEXEC_DEADLK;
+		goto ERR_0;
+	}
+
 	/* try to obtain the mutex, in case it is not  */
 	ret = (int)xSemaphoreTake(_hdl->rtos_mtx_hdl, portMAX_DELAY);
-	if (ret == pdFALSE) {
-		ret = -EINVAL;
-	} else {
-		ret = EOK;
+	switch (ret) {
+		case pdPASS : ret = EOK; break;
+		case pdFALSE : ret = -ESTD_FAULT; break;
 	}
 
-	if (ret == EOK) {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "mutex_lock(): successul (ID:'%u')", _hdl->rtos_mtx_hdl);
-	} else {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "mutex_lock(): failed with errror code %i", ret);
+	if (ret < EOK) {
+		goto ERR_0;
 	}
 
+	msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "mutex_lock(): successul (ID:'%u')", _hdl->rtos_mtx_hdl);
+
+	return EOK;
+	ERR_0:
+	msg(LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "mutex_lock(): failed with errror code %i", ret);
 	return ret;
 }
 
@@ -579,6 +593,7 @@ int lib_thread__mutex_unlock (mutex_hdl_t _hdl)
 	 * >>>>>	locals 	<<<<<<
 	 * ******************************************************************/
 	int ret;
+	TaskHandle_t mtx_owner_thd, current_thd;
 
 	/* *******************************************************************
 	 * >>>>>	start of code section			<<<<<<
@@ -589,6 +604,14 @@ int lib_thread__mutex_unlock (mutex_hdl_t _hdl)
 	}
 
 	if (_hdl->rtos_mtx_hdl == NULL) {
+		ret = -ESTD_PERM;
+		goto ERR_0;
+	}
+
+	current_thd = xTaskGetCurrentTaskHandle();
+	mtx_owner_thd = xSemaphoreGetMutexHolder(_hdl->rtos_mtx_hdl);
+
+	if(current_thd != mtx_owner_thd) {
 		ret = -ESTD_PERM;
 		goto ERR_0;
 	}
