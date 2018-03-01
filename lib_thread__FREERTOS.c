@@ -484,37 +484,36 @@ int lib_thread__mutex_destroy (mutex_hdl_t *_hdl)
 	 * >>>>>	start of code section / check functions' arguments	<<<<<<
 	 * ******************************************************************/
 	if (_hdl == NULL){
-		return -EPAR_NULL;
+		ret = -EPAR_NULL;
+		goto ERR_0;
 	}
 
-	if (*_hdl == NULL){
-		return -ENOENT;
+	if (*_hdl == NULL) {
+		ret = -ESTD_INVAL;
+		goto ERR_0;
 	}
+
 	taskENTER_CRITICAL();
 
 	mtx_id = (unsigned int)(*_hdl)->rtos_mtx_hdl;
 	/* check, whether this mutex is still hold by another thread, quit if so */
 	taskhandle = xSemaphoreGetMutexHolder((*_hdl)->rtos_mtx_hdl);
-	if (taskhandle == NULL) {
-		ret = EOK;
-	} else {
-		ret = -ESTD_BUSY;
+	if (taskhandle != NULL) {
+		taskEXIT_CRITICAL();
+		return -ESTD_BUSY;
 	}
 
-	if (ret == EOK) {
-		vSemaphoreDelete((*_hdl)->rtos_mtx_hdl);
-		(*_hdl)->rtos_mtx_hdl = NULL;
-	}
-	if (ret == EOK) {
-		vPortFree((*_hdl));
-	}
+	vSemaphoreDelete((*_hdl)->rtos_mtx_hdl);
+	(*_hdl)->rtos_mtx_hdl = NULL;
+	vPortFree((*_hdl));
+	*_hdl = NULL;
 	taskEXIT_CRITICAL();
 
-	if (ret == EOK) {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "mutex_destroy(): successul (ID:'%u')",mtx_id);
-	} else {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "mutex_destroy(): failed with errror code %i", ret);
-	}
+	msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "mutex_destroy(): successul (ID:'%u')",mtx_id);
+	return EOK;
+
+	ERR_0:
+	msg(LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "mutex_destroy(): failed with errror code %i", ret);
 	return ret;
 }
 
@@ -550,14 +549,16 @@ int lib_thread__mutex_lock (mutex_hdl_t _hdl)
 		goto ERR_0;
 	}
 
+	taskENTER_CRITICAL();
 	current_thd = xTaskGetCurrentTaskHandle();
 	mtx_owner_thd = xSemaphoreGetMutexHolder(_hdl->rtos_mtx_hdl);
 	if(current_thd==mtx_owner_thd) {
 		ret = -EEXEC_DEADLK;
-		goto ERR_0;
+		goto ERR_1;
 	}
 
 	/* try to obtain the mutex, in case it is not  */
+	taskEXIT_CRITICAL();
 	ret = (int)xSemaphoreTake(_hdl->rtos_mtx_hdl, portMAX_DELAY);
 	switch (ret) {
 		case pdPASS : ret = EOK; break;
@@ -571,6 +572,10 @@ int lib_thread__mutex_lock (mutex_hdl_t _hdl)
 	msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "mutex_lock(): successul (ID:'%u')", _hdl->rtos_mtx_hdl);
 
 	return EOK;
+
+	ERR_1:
+	taskEXIT_CRITICAL();
+
 	ERR_0:
 	msg(LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "mutex_lock(): failed with errror code %i", ret);
 	return ret;
@@ -651,7 +656,7 @@ int lib_thread__mutex_trylock (mutex_hdl_t _hdl)
 	 * >>>>>	locals 	<<<<<<
 	 * ******************************************************************/
 	int ret;
-	TaskHandle_t taskhandle;
+	TaskHandle_t mtx_owner_thd;
 	/* *******************************************************************
 	 * >>>>>	start of code section			<<<<<<
 	 * ******************************************************************/
@@ -659,33 +664,29 @@ int lib_thread__mutex_trylock (mutex_hdl_t _hdl)
 		return -EPAR_NULL;
 	}
 
-	//vTaskSuspendAll();
 	taskENTER_CRITICAL();
-	taskhandle = xSemaphoreGetMutexHolder(_hdl->rtos_mtx_hdl);
-	if(taskhandle == NULL) {
-		ret = EOK;
-	}
-	else {
-		ret = -ESTD_BUSY;
+	mtx_owner_thd = xSemaphoreGetMutexHolder(_hdl->rtos_mtx_hdl);
+	if(mtx_owner_thd != NULL) {
+		taskEXIT_CRITICAL();
+		return -ESTD_BUSY;
 	}
 
-	if(ret == EOK) {
-		ret = (int)xSemaphoreTake(_hdl->rtos_mtx_hdl, portMAX_DELAY);
-		if (ret == pdFALSE) { /* mutex could not be obtained */
-		/* map this value to the one specified within the POSIX publication */
-			ret = -ESTD_FAULT;
-		} else {
-			ret = EOK;
-		}
+	ret = (int)xSemaphoreTake(_hdl->rtos_mtx_hdl, portMAX_DELAY);
+	switch (ret) {
+		case pdPASS : ret = EOK; break;
+		case pdFALSE : ret = -ESTD_PERM; break;
 	}
+	if (ret < EOK) {
+		goto ERR_0;
+	}
+
 	taskEXIT_CRITICAL();
 
-	if (ret == EOK) {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "mutex_trylock(): successul (ID:'%u')", _hdl->rtos_mtx_hdl);
-	} else {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "mutex_trylock(): failed with error code %i", ret);
-	}
+	msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "mutex_trylock(): successul (ID:'%u')", _hdl->rtos_mtx_hdl);
+	return EOK;
 
+	ERR_0:
+	msg(LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "mutex_trylock(): failed with error code %i", ret);
 	return ret;
 }
 
