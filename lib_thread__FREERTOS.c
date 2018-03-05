@@ -44,7 +44,7 @@
 /* *******************************************************************
  * defines
  * ******************************************************************/
-
+#define SEM_VALUE_MAX 				255
 #define M_LIB_THREAD__MODULE_ID 	"LIB_THD"
 
 /* *******************************************************************
@@ -714,37 +714,27 @@ int lib_thread__signal_init (signal_hdl_t *_hdl)
 	 * >>>>>	start of code section								<<<<<<
 	 * ******************************************************************/
 	if (_hdl == NULL){
-		return -EPAR_NULL;
-	} else {
-		ret = EOK;
-	}
-	if (ret == EOK) {
-		sgn_hdl = pvPortMalloc(sizeof(struct signal_hdl_attr));
-		if (sgn_hdl == NULL) {
-			ret = -ESTD_NOMEM;
-		} else {
-			sgn_hdl->destroy=0;
-			ret = EOK;
-		}
+		ret = -EPAR_NULL;
+		goto ERR_0;
 	}
 
-	if (ret == EOK) {
 
-		sgn_hdl->rtos_sgn_hdl = xQueueCreate(5, sizeof(uint32_t));
-		if(sgn_hdl->rtos_sgn_hdl == NULL) {
-			ret = -ESTD_NOMEM;
-		}
-		else {
-			*_hdl = sgn_hdl;
-			ret = EOK;
-		}
+	sgn_hdl = pvPortMalloc(sizeof(struct signal_hdl_attr));
+	if (sgn_hdl == NULL) {
+		ret = -ESTD_NOMEM;
 	}
 
-	if (ret == EOK) {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "signal_init(): successul");
-	} else {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "signal_init(): failed with errror code %i", ret);
+	sgn_hdl->rtos_sgn_hdl = xQueueCreate(5, sizeof(uint32_t));
+	if(sgn_hdl->rtos_sgn_hdl == NULL) {
+		ret = -ESTD_NOMEM;
 	}
+	*_hdl = sgn_hdl;
+
+	msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "signal_init(): successfully");
+	return EOK;
+
+	ERR_0:
+	msg(LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "signal_init(): failed with error code %i", ret);
 	return ret;
 }
 
@@ -763,20 +753,15 @@ int lib_thread__signal_init (signal_hdl_t *_hdl)
  * ******************************************************************/
 int lib_thread__signal_destroy (signal_hdl_t *_hdl)
 {
-	/* *******************************************************************
-	 * >>>>>	locals 	<<<<<<
-	 * ******************************************************************/
 	int ret= EOK;
 	int ret_val;
 	enum sgn_dequeue_attr dequeue_attr;
-	/* *******************************************************************
-	 * >>>>>	start of code section			<<<<<<
-	 * ******************************************************************/
+
 	if (_hdl == NULL){
 		return -EPAR_NULL;
 	}
 	if (*_hdl == NULL){
-		return -ENOENT;
+		return -ESTD_INVAL;
 	}
 
 	dequeue_attr = DEQUEUE_ATTR_destroy;
@@ -843,7 +828,7 @@ int lib_thread__signal_send (signal_hdl_t _hdl)
 	}
 
 	if (_hdl->destroy) {
-		return -EPERM;
+		return -ESTD_PERM;
 	}
 
 	/* the signal has already been created, hence just give it! */
@@ -873,17 +858,15 @@ int lib_thread__signal_send (signal_hdl_t _hdl)
  * ******************************************************************/
 int lib_thread__signal_wait (signal_hdl_t _hdl)
 {
-	/* *******************************************************************
-	 * >>>>>	locals 	<<<<<<
-	 * ******************************************************************/
 	int ret_val, ret;
 	enum sgn_dequeue_attr dequeue_attr;
 
-	/* *******************************************************************
-	 * >>>>>	start of code section			<<<<<<
-	 * ******************************************************************/
+	if (_hdl == NULL){
+		return -EPAR_NULL;
+	}
+
 	if (_hdl->destroy) {
-		return -EPERM;
+		return -ESTD_PERM;
 	}
 
 	ret_val = xQueueReceive( _hdl->rtos_sgn_hdl, &dequeue_attr, portMAX_DELAY);
@@ -895,7 +878,7 @@ int lib_thread__signal_wait (signal_hdl_t _hdl)
 	}
 
 	if ((_hdl->destroy)||(dequeue_attr == DEQUEUE_ATTR_destroy)) {
-		return -EPERM;
+		return -ESTD_PERM;
 	}
 
 	return ret;
@@ -914,19 +897,17 @@ int lib_thread__signal_wait (signal_hdl_t _hdl)
  * ---------
  * \return	'0', if successful, < '0' if not successful
  * ******************************************************************/
-int lib_thread__signal_wait_timedwait (signal_hdl_t _hdl, unsigned int _milliseconds)
+int lib_thread__signal_timedwait (signal_hdl_t _hdl, unsigned int _milliseconds)
 {
-	/* *******************************************************************
-	 * >>>>>	locals 	<<<<<<
-	 * ******************************************************************/
 	int ret_val, ret;
 	enum sgn_dequeue_attr dequeue_attr;
 
-	/* *******************************************************************
-	 * >>>>>	start of code section			<<<<<<
-	 * ******************************************************************/
+	if (_hdl == NULL){
+		return -EPAR_NULL;
+	}
+
 	if (_hdl->destroy) {
-		return -EPERM;
+		return -ESTD_PERM;
 	}
 
 	ret_val = xQueueReceive( _hdl->rtos_sgn_hdl, &dequeue_attr, ( portTickType )_milliseconds / portTICK_PERIOD_MS);
@@ -938,7 +919,7 @@ int lib_thread__signal_wait_timedwait (signal_hdl_t _hdl, unsigned int _millisec
 	}
 
 	if ((_hdl->destroy)||(dequeue_attr == DEQUEUE_ATTR_destroy)) {
-		return -EPERM;
+		return -ESTD_PERM;
 	}
 
 	return ret;
@@ -971,6 +952,10 @@ int lib_thread__sem_init (sem_hdl_t *_hdl, int _count)
 		return -EPAR_NULL;
 	}
 
+	if (_count > SEM_VALUE_MAX) {
+		return -ESTD_INVAL;
+	}
+
 	sem_hdl = pvPortMalloc(sizeof(struct sem_hdl_attr));
 	if (sem_hdl == NULL) {
 		ret = -ESTD_NOMEM;
@@ -980,7 +965,7 @@ int lib_thread__sem_init (sem_hdl_t *_hdl, int _count)
 	}
 	if (ret == EOK) {
 		/* initialize queue */
-		(*_hdl)->rtos_sem_hdl = xSemaphoreCreateCounting(255, 0);
+		(*_hdl)->rtos_sem_hdl = xSemaphoreCreateCounting(SEM_VALUE_MAX, _count);
 		if ((*_hdl)->rtos_sem_hdl == NULL) {
 			/* invalid, hence return the memory */
 			vPortFree(*_hdl);
@@ -1009,21 +994,16 @@ int lib_thread__sem_init (sem_hdl_t *_hdl, int _count)
  * ******************************************************************/
 int lib_thread__sem_destroy (sem_hdl_t *_hdl)
 {
-	/* *******************************************************************
-	 * >>>>>	locals 	<<<<<<
-	 * ******************************************************************/
-	int ret;
+	int ret = 0;
 
-	/* *******************************************************************
-	 * >>>>>	start of code section			<<<<<<
-	 * ******************************************************************/
 	if (_hdl == NULL){
 		return -EPAR_NULL;
 	}
 
 	if (*_hdl == NULL){
-		return -ENOENT;
+		return -ESTD_INVAL;
 	}
+
 	if ((*_hdl)->rtos_sem_hdl) {
 		vSemaphoreDelete((*_hdl)->rtos_sem_hdl);
 	}
