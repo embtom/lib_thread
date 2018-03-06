@@ -37,7 +37,7 @@
 #include <lib_log.h>
 
 /* project */
-//#include <stm32f1xx_hal_def.h>
+//#include <stm32f1xx.h>
 #include "lib_thread.h" /* interface  */
 
 
@@ -58,7 +58,10 @@ enum sgn_dequeue_attr {
 
 
 //extern void* pxCurrentTCB;
-
+//static inline unsigned int isInterrupt()
+//{
+//    return (SCB->ICSR & SCB_ICSR_VECTACTIVE_Msk) != 0 ;
+//}
 /* *******************************************************************
  * static function declarations
  * ******************************************************************/
@@ -939,45 +942,44 @@ int lib_thread__signal_timedwait (signal_hdl_t _hdl, unsigned int _milliseconds)
  * ******************************************************************/
 int lib_thread__sem_init (sem_hdl_t *_hdl, int _count)
 {
-	/* *******************************************************************
-	 * >>>>>	locals 	<<<<<<
-	 * ******************************************************************/
 	int ret;
 	sem_hdl_t sem_hdl;
 
-	/* *******************************************************************
-	 * >>>>>	start of code section			<<<<<<
-	 * ******************************************************************/
 	if (_hdl == NULL){
-		return -EPAR_NULL;
+		ret = -EPAR_NULL;
+		goto ERR_0;
 	}
 
 	if (_count > SEM_VALUE_MAX) {
-		return -ESTD_INVAL;
+		ret = -ESTD_INVAL;
+		goto ERR_0;
 	}
 
 	sem_hdl = pvPortMalloc(sizeof(struct sem_hdl_attr));
 	if (sem_hdl == NULL) {
 		ret = -ESTD_NOMEM;
-	} else {
-		*_hdl = sem_hdl;
-		ret = EOK;
+		goto ERR_0;
 	}
-	if (ret == EOK) {
-		/* initialize queue */
-		(*_hdl)->rtos_sem_hdl = xSemaphoreCreateCounting(SEM_VALUE_MAX, _count);
-		if ((*_hdl)->rtos_sem_hdl == NULL) {
-			/* invalid, hence return the memory */
-			vPortFree(*_hdl);
-			(*_hdl) = NULL;
-		}
+
+	sem_hdl->rtos_sem_hdl = xSemaphoreCreateCounting(SEM_VALUE_MAX, _count);
+	if (sem_hdl->rtos_sem_hdl == NULL) {
+		ret = -ESTD_NOMEM;
+		goto ERR_1;
 	}
-	if (ret == EOK) {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "sem_init(): successul");
-	} else {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "sem_init(): failed with errror code %i", ret);
+
+	*_hdl = sem_hdl;
+	msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "sem_init(): successul");
+	return EOK;
+
+	ERR_1:
+	vPortFree(*_hdl);
+	ERR_0:
+	if (_hdl != NULL) {
+		*_hdl = NULL;
 	}
+	msg(LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "sem_init(): failed with errror code %i", ret);
 	return ret;
+
 }
 
 /* *******************************************************************
@@ -997,28 +999,26 @@ int lib_thread__sem_destroy (sem_hdl_t *_hdl)
 	int ret = 0;
 
 	if (_hdl == NULL){
-		return -EPAR_NULL;
+		ret = -EPAR_NULL;
+		goto ERR_0;
 	}
 
 	if (*_hdl == NULL){
-		return -ESTD_INVAL;
+		ret = -ESTD_INVAL;
+		goto ERR_0;
 	}
 
-	if ((*_hdl)->rtos_sem_hdl) {
-		vSemaphoreDelete((*_hdl)->rtos_sem_hdl);
-	}
-	if (*_hdl != NULL) {
-		/* invalid, hence return the memory */
-		vPortFree(*_hdl);
-		(*_hdl) = NULL;
-	}
-	/* destroy queue element */
-	if (ret == EOK) {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "sem_destroy(): successul");
-	} else {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "sem_destroy(): failed with errror code %i", ret);
-	}
+	vSemaphoreDelete((*_hdl)->rtos_sem_hdl);
+	vPortFree(*_hdl);
+	(*_hdl) = NULL;
+
+	msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "sem_destroy(): successul");
+	return EOK;
+
+	ERR_0:
+	msg(LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "sem_destroy(): failed with errror code %i", ret);
 	return ret;
+
 }
 
 /* *******************************************************************
@@ -1034,17 +1034,12 @@ int lib_thread__sem_destroy (sem_hdl_t *_hdl)
  * ******************************************************************/
 int lib_thread__sem_post (sem_hdl_t _hdl)
 {
-	/* *******************************************************************
-	 * >>>>>	locals 	<<<<<<
-	 * ******************************************************************/
 	int ret;
 	BaseType_t xHigherPriorityTaskWoken;
 
-	/* *******************************************************************
-	 * >>>>>	start of code section			<<<<<<
-	 * ******************************************************************/
 	if (_hdl == NULL){
-		return -EPAR_NULL;
+		ret = -EPAR_NULL;
+		goto ERR_0;
 	}
 
 	if(portNVIC_INT_CTRL_REG & portVECTACTIVE_MASK) {
@@ -1056,11 +1051,14 @@ int lib_thread__sem_post (sem_hdl_t _hdl)
 
 	if (ret != pdPASS ) {
 		ret = -ESTD_FAULT;
-	}
-	else {
-		ret = EOK;
+		goto ERR_0;
 	}
 
+    msg (LOG_LEVEL_debug_prio_1, M_LIB_THREAD__MODULE_ID, "%s():  successfully\n",__func__);
+	return EOK;
+
+	ERR_0:
+	msg (LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "%s(): failed with retval %i\n",__func__, ret );
 	return ret;
 }
 
@@ -1078,26 +1076,73 @@ int lib_thread__sem_post (sem_hdl_t _hdl)
  * ******************************************************************/
 int lib_thread__sem_wait (sem_hdl_t _hdl)
 {
-	/* *******************************************************************
-	 * >>>>>	locals 	<<<<<<
-	 * ******************************************************************/
 	int ret, ret_val;
 
-	/* *******************************************************************
-	 * >>>>>	start of code section			<<<<<<
-	 * ******************************************************************/
 	if (_hdl == NULL){
-		return -EPAR_NULL;
+		ret = -EPAR_NULL;
+		goto ERR_0;
 	}
 
 	ret_val = xSemaphoreTake(_hdl->rtos_sem_hdl, portMAX_DELAY);
 	switch(ret_val){
 		case pdPASS : ret = EOK; break;
-		case errQUEUE_EMPTY: ret = -EEXEC_TO; break;
+		case errQUEUE_EMPTY: ret = -ESTD_FAULT; break;
 		default : ret = -ESTD_FAULT; break;
-
 	}
+
+	if (ret < EOK) {
+		goto ERR_0;
+	}
+
+    msg (LOG_LEVEL_debug_prio_1, M_LIB_THREAD__MODULE_ID, "%s():  successfully\n",__func__);
+
+	return EOK;
+
+	ERR_0:
+	msg (LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "%s() : failed with retval %i\n", __func__, ret );
 	return ret;
+}
+
+/* *******************************************************************
+ * \brief	Decrement semaphore and if count <=0 calling thread is blocked
+ * ---------
+ * \remark	If the value of the semaphore is negative, the calling process blocks;
+ * 			one of the blocked processes wakes up when another process calls sem_post
+ * ---------
+ *
+ * \param	_hdl				[in] :	handle of a semaphore object
+ *
+ * ---------
+ * \return	'0', if successful, < '0' if not successful
+ * ******************************************************************/
+int lib_thread__sem_timedwait (sem_hdl_t _hdl, int _milliseconds)
+{
+	int ret, ret_val;
+
+	if (_hdl == NULL){
+		ret = -EPAR_NULL;
+		goto ERR_0;
+	}
+
+	ret_val = xSemaphoreTake(_hdl->rtos_sem_hdl, _milliseconds / portTICK_PERIOD_MS);
+	switch(ret_val) {
+		case pdPASS : ret = EOK; break;
+		case pdFAIL : ret = -EEXEC_TO; break;
+		default : ret = -ESTD_FAULT; break;
+	}
+
+	if (ret < EOK) {
+		goto ERR_0;
+	}
+
+    msg (LOG_LEVEL_debug_prio_1, M_LIB_THREAD__MODULE_ID, "%s():  successfully\n",__func__);
+
+	return EOK;
+
+	ERR_0:
+	msg (LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "%s() : failed with retval %i\n", __func__, ret );
+	return ret;
+
 }
 
 /* *******************************************************************
@@ -1114,37 +1159,34 @@ int lib_thread__sem_wait (sem_hdl_t _hdl)
  * ******************************************************************/
 int lib_thread__sem_trywait (sem_hdl_t _hdl)
 {
-	/* *******************************************************************
-	 * >>>>>	locals 												<<<<<<
-	 * ******************************************************************/
 	int ret, ret_val;
 
-	/* *******************************************************************
-	 * >>>>>	start of code section								<<<<<<
-	 * ******************************************************************/
 	if (_hdl == NULL){
-		return -EPAR_NULL;
+		ret = -EPAR_NULL;
+		goto ERR_0;
 	}
+
 	ret_val = xSemaphoreTake(_hdl->rtos_sem_hdl, 0);
 	switch(ret_val){
 		case pdPASS : ret = EOK; break;
-		case errQUEUE_EMPTY: ret = -EEXEC_TO; break;
-		default : ret = -ESTD_FAULT; break;
-
+		case errQUEUE_EMPTY: ret = -ESTD_AGAIN; break;
+		default : ret = -ESTD_AGAIN; break;
 	}
 
+	if (ret < EOK) {
+		goto ERR_0;
+	}
+
+	msg (LOG_LEVEL_debug_prio_1, M_LIB_THREAD__MODULE_ID, "%s(): successfully\n",__func__);
+	return EOK;
+
+	ERR_0:
+	msg (LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "%s(): failed with retval %i\n",__func__, ret );
 	return ret;
 }
 
 int lib_thread__msleep (unsigned int _milliseconds)
 {
-	/* *******************************************************************
-	 * >>>>>	locals 	<<<<<<
-	 * ******************************************************************/
-
-	/* *******************************************************************
-	 * >>>>>	start of code section			<<<<<<
-	 * ******************************************************************/
 	vTaskDelay( _milliseconds / portTICK_PERIOD_MS );
 	return EOK;
 }
