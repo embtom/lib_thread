@@ -731,6 +731,7 @@ int lib_thread__signal_init (signal_hdl_t *_hdl)
 	if(sgn_hdl->rtos_sgn_hdl == NULL) {
 		ret = -ESTD_NOMEM;
 	}
+	sgn_hdl->destroy = 0;
 	*_hdl = sgn_hdl;
 
 	msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "signal_init(): successfully");
