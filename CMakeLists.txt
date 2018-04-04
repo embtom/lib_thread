@@ -3,11 +3,9 @@ project(lib_thread)
 #However, the file(GLOB...) allows for wildcard additions:
 file(GLOB SOURCES "*.c")
 
-add_definitions(-D_GNU_SOURCE=1 -D__USE_GNU)
-add_definitions(-DTRACE)
+set(TREADING_LIBS pthread rt) 
 
-include_directories(${lib_log_SOURCE_DIR})
-
-#Generate the static library from the sources
-add_library(${PROJECT_NAME} OBJECT ${SOURCES})
-target_include_directories(${PROJECT_NAME} PUBLIC ${itf_lib_convention_SOURCE_DIR} ${itf_lib_thread_SOURCE_DIR})
+add_library(${PROJECT_NAME} STATIC ${SOURCES})
+target_link_libraries(${PROJECT_NAME} itf_lib_convention itf_lib_thread lib_log)
+target_compile_definitions(${PROJECT_NAME} PRIVATE _GNU_SOURCE=1 __USE_GNU TRACE)
+target_link_libraries(${PROJECT_NAME} ${TREADING_LIBS} )
