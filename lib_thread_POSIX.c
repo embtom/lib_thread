@@ -280,7 +280,7 @@ int lib_thread__create (thread_hdl_t *_hdl, thread_worker_t *_worker, void *_arg
 	if (_thread_name == NULL)
 		msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s(): successfully (Thread ID '%u' Name '<NO NAME>' prio: '%u')\n",__func__, hdl->thread_hdl, thread_prio);
 	else
-		msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s(): successfully (Thread ID '%u' Name '%s' prio: '%u')\n",__func__, hdl->thread_hdl, _thread_name, thread_prio);
+		msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): successfully (Thread ID '%u' Name '%s' prio: '%u')\n",__func__, hdl->thread_hdl, _thread_name, thread_prio);
 
 	*_hdl = hdl;
 	return EOK;
@@ -321,6 +321,7 @@ int lib_thread__create (thread_hdl_t *_hdl, thread_worker_t *_worker, void *_arg
 int lib_thread__join(thread_hdl_t *_hdl, void **_ret_val)
 {
 	int ret, threadid;
+	char buffer[20];
 
 	if (_hdl == NULL) {
 		ret = -EPAR_NULL;
@@ -332,18 +333,20 @@ int lib_thread__join(thread_hdl_t *_hdl, void **_ret_val)
 		goto ERR_0;
 	}
 
+	lib_thread__getname(*_hdl, &buffer[0], sizeof(buffer));
+
 	ret = pthread_join((*_hdl)->thread_hdl, _ret_val);
 	if (ret != EOK) {
 		ret = convert_std_errno(ret);
 		goto ERR_0;
 	}
 
-//	threadid = (*_hdl)->thread_hdl;
+	threadid = (*_hdl)->thread_hdl;
 
 	free(*_hdl);
 	(*_hdl) = NULL;
-
-	msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s(): successfully\n",__func__);
+	//LOG_LEVEL_debug_prio_1
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): successfully (Thread ID '%u' Name '%s') \n",__func__, threadid ,buffer);
 
 	return EOK;
 
