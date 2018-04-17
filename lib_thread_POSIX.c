@@ -51,6 +51,8 @@
  * ******************************************************************/
 struct thread_hdl_attr {
 	pthread_t thread_hdl;
+	char *thread_name;
+	size_t thread_name_len;
 };
 
 struct mutex_hdl_attr {
@@ -187,7 +189,7 @@ int lib_thread__init(enum process_sched _sched, int _pcur)
  * ******************************************************************/
 int lib_thread__create (thread_hdl_t *_hdl, thread_worker_t *_worker, void *_arg, int _relative_priority, const char *_thread_name)
 {
-	int ret;
+	int ret, len;
 	int prio_min, prio_max, thread_prio;
 	struct sched_param	priority_param;
 	enum process_sched  sched;
@@ -274,6 +276,16 @@ int lib_thread__create (thread_hdl_t *_hdl, thread_worker_t *_worker, void *_arg
 
 	if (_thread_name != NULL) {
 		pthread_setname_np(hdl->thread_hdl,_thread_name);
+		len = strlen(_thread_name) +1;
+		hdl->thread_name = calloc(len,sizeof(char));
+		if (hdl->thread_name != NULL) {
+			memcpy(hdl->thread_name,_thread_name,len);
+			hdl->thread_name_len = len;
+		}
+	}
+	else {
+		hdl->thread_name = NULL;
+		hdl->thread_name_len = 0;
 	}
 
 
@@ -321,7 +333,7 @@ int lib_thread__create (thread_hdl_t *_hdl, thread_worker_t *_worker, void *_arg
 int lib_thread__join(thread_hdl_t *_hdl, void **_ret_val)
 {
 	int ret, threadid;
-	char buffer[20];
+	char buffer[20] = {0};
 
 	if (_hdl == NULL) {
 		ret = -EPAR_NULL;
@@ -339,6 +351,10 @@ int lib_thread__join(thread_hdl_t *_hdl, void **_ret_val)
 	if (ret != EOK) {
 		ret = convert_std_errno(ret);
 		goto ERR_0;
+	}
+
+	if ((*_hdl)->thread_name != NULL) {
+		free((*_hdl)->thread_name);
 	}
 
 	threadid = (*_hdl)->thread_hdl;
@@ -405,23 +421,36 @@ int lib_thread__cancel(thread_hdl_t _hdl)
  * ******************************************************************/
 int lib_thread__getname(thread_hdl_t _hdl, char * _name, int _maxlen)
 {
-	int ret;
+	int ret, len;
 
 	if ((_hdl == NULL) || (_name == NULL)) {
 		ret = -EPAR_NULL;
 		goto ERR_0;
 	}
 
-	ret = pthread_getname_np(_hdl->thread_hdl,_name, _maxlen);
-	if (ret != 0) {
-		/* Mapping of the return vales to the more common on of the libpthread */
-		if (ret == EINVAL)  ret = ERANGE;
-		if (ret == ENOENT)  ret = ESRCH;
-		ret = convert_std_errno(ret);
-		goto ERR_0;
+	if(_hdl->thread_name != NULL) {
+		if (_hdl->thread_name_len >= _maxlen) {
+			len = _maxlen;
+		}
+		else {
+			len = _hdl->thread_name_len;
+		}
+		memcpy(_name,_hdl->thread_name, len);
+		return EOK;
 	}
-	msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s():  successfully (Thread ID '%u')\n",__func__, _hdl->thread_hdl);
-	return EOK;
+
+//	ret = pthread_getname_np(_hdl->thread_hdl,_name, _maxlen);
+//	if (ret != 0) {
+//		/* Mapping of the return vales to the more common on of the libpthread */
+//		if (ret == EINVAL)
+//			ret = ERANGE;
+//		if (ret == ENOENT)
+//			ret = ESRCH;
+//		ret = convert_std_errno(ret);
+//		goto ERR_0;
+//	}
+	ret = ENOENT;
+	ret = convert_std_errno(ret);
 
 	ERR_0:
 	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i\n",__func__, ret );
