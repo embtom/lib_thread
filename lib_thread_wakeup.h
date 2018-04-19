@@ -31,7 +31,8 @@ int lib_thread__wakeup_init(void);
 int lib_thread__wakeup_cleanup(void);
 int lib_thread__wakeup_create(wakeup_hdl_t *_wu_obj, unsigned _interval);
 int lib_thread__wakeup_destroy(wakeup_hdl_t *_wu_obj);
-int lib_thread__wakeup_wait(wakeup_hdl_t *_wu_obj);
+int lib_thread__wakeup_setinterval(wakeup_hdl_t _wu_obj, unsigned _interval);
+int lib_thread__wakeup_wait(wakeup_hdl_t _wu_obj);
 
 
 
