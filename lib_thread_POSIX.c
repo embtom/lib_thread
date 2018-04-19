@@ -255,7 +255,7 @@ int lib_thread__create (thread_hdl_t *_hdl, thread_worker_t *_worker, void *_arg
 		goto ERR_1;
 	}
 
-	hdl = malloc(sizeof (struct thread_hdl_attr));
+	hdl = calloc(1,sizeof (struct thread_hdl_attr));
 	if(hdl == NULL) {
 		ret = -ESTD_NOMEM;
 		goto ERR_1;
@@ -292,7 +292,7 @@ int lib_thread__create (thread_hdl_t *_hdl, thread_worker_t *_worker, void *_arg
 	if (_thread_name == NULL)
 		msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s(): successfully (Thread ID '%u' Name '<NO NAME>' prio: '%u')\n",__func__, hdl->thread_hdl, thread_prio);
 	else
-		msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): successfully (Thread ID '%u' Name '%s' prio: '%u')\n",__func__, hdl->thread_hdl, _thread_name, thread_prio);
+		msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s(): successfully (Thread ID '%u' Name '%s' prio: '%u')\n",__func__, hdl->thread_hdl, _thread_name, thread_prio);
 
 	*_hdl = hdl;
 	return EOK;
@@ -362,7 +362,7 @@ int lib_thread__join(thread_hdl_t *_hdl, void **_ret_val)
 	free(*_hdl);
 	(*_hdl) = NULL;
 	//LOG_LEVEL_debug_prio_1
-	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): successfully (Thread ID '%u' Name '%s') \n",__func__, threadid ,buffer);
+	msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s(): successfully (Thread ID '%u' Name '%s') \n",__func__, threadid ,buffer);
 
 	return EOK;
 
@@ -439,16 +439,6 @@ int lib_thread__getname(thread_hdl_t _hdl, char * _name, int _maxlen)
 		return EOK;
 	}
 
-//	ret = pthread_getname_np(_hdl->thread_hdl,_name, _maxlen);
-//	if (ret != 0) {
-//		/* Mapping of the return vales to the more common on of the libpthread */
-//		if (ret == EINVAL)
-//			ret = ERANGE;
-//		if (ret == ENOENT)
-//			ret = ESRCH;
-//		ret = convert_std_errno(ret);
-//		goto ERR_0;
-//	}
 	ret = ENOENT;
 	ret = convert_std_errno(ret);
 

@@ -573,23 +573,23 @@ int lib_thread__wakeup_destroy(wakeup_hdl_t *_wu_obj)
 
 	/* check whether component is properly initialized */
 	if ((s_wakeup_signals_mmap == NULL) || (s_wakeup_init_calls == 0)) {
-		ret = EEXEC_NOINIT;
+        ret = -EEXEC_NOINIT;
 		msg (LOG_LEVEL_error, M_DEV_LIB_THREAD_WHP_MODULE_ID,"");
 		return ret;
 	}
 
 	/* check arguments */
 	if (_wu_obj == NULL){
-		ret = EPAR_NULL;
+        ret = -EPAR_NULL;
 		msg (LOG_LEVEL_error, M_DEV_LIB_THREAD_WHP_MODULE_ID,", _wu_obj");
 		return ret;
 	}
 
-	if (*_wu_obj == NULL){
-		ret = EINVAL;
-		msg (LOG_LEVEL_error, M_DEV_LIB_THREAD_WHP_MODULE_ID,", *_wu_obj");
-		return ret;
-	}
+    if (*_wu_obj == NULL){
+        ret = EINVAL;
+        msg (LOG_LEVEL_error, M_DEV_LIB_THREAD_WHP_MODULE_ID,", *_wu_obj");
+        return ret;
+    }
 
 	pthread_mutex_lock(&s_wakeup_signals_mmap->mmap_mtx);
 
@@ -665,6 +665,31 @@ int lib_thread__wakeup_destroy(wakeup_hdl_t *_wu_obj)
 #endif
 
 
+int lib_thread__wakeup_setinterval(wakeup_hdl_t _wu_obj, unsigned _interval)
+{
+    int ret;
+    struct itimerspec	itval;
+
+    /* check arguments */
+    if (_wu_obj == NULL){
+        ret = -EPAR_NULL;
+        msg (LOG_LEVEL_error, M_DEV_LIB_THREAD_WHP_MODULE_ID,"_wu_obj");
+        return ret;
+    }
+
+    itval.it_value.tv_sec		= 0;
+    itval.it_value.tv_nsec		= 1;
+    itval.it_interval.tv_sec	= (int)_interval / 1000;
+    itval.it_interval.tv_nsec	= ((int)_interval % 1000) * 1000000;
+    if (timer_settime((_wu_obj)->timer_id, 0, &itval, NULL) != 0){
+        /* should actually never happen */
+        ret = -errno;
+        msg (LOG_LEVEL_error, M_DEV_LIB_THREAD_WHP_MODULE_ID,"::timer_interval_settim");
+        return ret;
+    }
+    return EOK;
+}
+
 /* ************************************************************************//**
  * \brief	Wait on the specified wakeup object
  *
@@ -690,7 +715,7 @@ int lib_thread__wakeup_destroy(wakeup_hdl_t *_wu_obj)
  *			-ESTD_AGAIN		OSEK only: Alarm timer for this thread is already in use
  *			-ESTD_ACCES		OSEK only: Function is called from within a prohibited context
  * ****************************************************************************/
-int lib_thread__wakeup_wait(wakeup_hdl_t *_wu_obj)
+int lib_thread__wakeup_wait(wakeup_hdl_t _wu_obj)
 {
 	int ret;
 
@@ -710,21 +735,16 @@ int lib_thread__wakeup_wait(wakeup_hdl_t *_wu_obj)
 		msg (LOG_LEVEL_error, M_DEV_LIB_THREAD_WHP_MODULE_ID,"_wu_obj");
 		return ret;
 	}
-	if (*_wu_obj == NULL){
-		ret = -EINVAL;
-		msg (LOG_LEVEL_error, M_DEV_LIB_THREAD_WHP_MODULE_ID,"*_wu_obj");
-		return ret;
-	}
 
 #ifdef _WIN32
 	/* sleep for registered amount of time */
-	lib_thread__msleep((*_wu_obj)->interval);
+    lib_thread__msleep((_wu_obj)->interval);
 #else	/* any fully POSIX-compliant OS */
 	{
 		int sig;
 
 		/* wait for specified alarm signal to be raised */
-		ret = sigwait(&((*_wu_obj)->sigset), &sig);
+        ret = sigwait(&((_wu_obj)->sigset), &sig);
 		if (ret != 0){
 			/* Should actually never happen, except if a signal is received.
 			 * In that case, the error will be reported but not actually handled,
