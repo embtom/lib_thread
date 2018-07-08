@@ -51,6 +51,12 @@
  * custom data types (e.g. enumerations, structures, unions)
  * ******************************************************************/
 
+enum mtx_mode {
+	MTX_MODE_normal,
+	MTX_MODE_recursive,
+	MTX_MODE_CNT
+};
+
 enum sgn_dequeue_attr {
 	DEQUEUE_ATTR_rcv,
 	DEQUEUE_ATTR_destroy
@@ -88,6 +94,7 @@ struct thunk_task_attr {
  * ******************************************************************/
 struct mutex_hdl_attr {
 	SemaphoreHandle_t rtos_mtx_hdl;
+	enum mtx_mode mode;
 };
 
 /* *******************************************************************
@@ -108,9 +115,9 @@ struct sem_hdl_attr {
 };
 
 /* *******************************************************************
- * (static) variables declarations
+ * static function declarations
  * ******************************************************************/
-
+static int lib_thread__mutex_mode_init (mutex_hdl_t *_hdl, enum mtx_mode _mode);
 static void thunk_lib_thread__taskprocessing(void * _arg);
 
 
@@ -422,44 +429,24 @@ int lib_thread__getname(thread_hdl_t _hdl, char * _name, int _maxlen)
  * ******************************************************************/
 int lib_thread__mutex_init (mutex_hdl_t *_hdl)
 {
-	/* *******************************************************************
-	 * >>>>>	locals	<<<<<<
-	 * ******************************************************************/
-	int ret;
-	struct mutex_hdl_attr *mtx_hdl;
+	return lib_thread__mutex_mode_init (_hdl, MTX_MODE_normal);
+}
 
-	/* *******************************************************************
-	 * >>>>>	start of code section / check functions' arguments 	<<<<<<
-	 * ******************************************************************/
-	if (_hdl == NULL) {
-		ret = -EPAR_NULL;
-		goto ERR_0;
-	}
-
-	mtx_hdl = pvPortMalloc(sizeof(struct mutex_hdl_attr));
-	if (mtx_hdl == NULL) {
-		ret = -ESTD_NOMEM;
-		goto ERR_0;
-	}
-
-	/* alloc memory in order to create a mutex */
-	mtx_hdl->rtos_mtx_hdl = xSemaphoreCreateMutex();
-	if (mtx_hdl->rtos_mtx_hdl == NULL) {
-		/* cleanup memory */
-		ret = -ESTD_FAULT;
-		goto ERR_1;
-	}
-
-	*_hdl = mtx_hdl;
-	msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "mutex_init(): successul (ID:'%u')", mtx_hdl->rtos_mtx_hdl);
-	return EOK;
-
-	ERR_1:
-	vPortFree(mtx_hdl);
-
-	ERR_0:
-	msg(LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "mutex_init(): failed with errror code %i", ret);
-	return ret;
+/* *******************************************************************
+ * \brief	Initialization of a mutex object
+ * ---------
+ * \remark
+ * ---------
+ *
+ * \param	_hdl			[in/out] :	pointer to the handle of a mutex object
+ * 										to initialize
+ *
+ * ---------
+ * \return	'0', if successful, < '0' if not successful
+ * ******************************************************************/
+int lib_thread__mutex_recursive_init (mutex_hdl_t *_hdl)
+{
+	return lib_thread__mutex_mode_init (_hdl, MTX_MODE_recursive);
 }
 
 /* *******************************************************************
@@ -553,16 +540,31 @@ int lib_thread__mutex_lock (mutex_hdl_t _hdl)
 	}
 
 	taskENTER_CRITICAL();
-	current_thd = xTaskGetCurrentTaskHandle();
-	mtx_owner_thd = xSemaphoreGetMutexHolder(_hdl->rtos_mtx_hdl);
-	if(current_thd==mtx_owner_thd) {
-		ret = -EEXEC_DEADLK;
-		goto ERR_1;
+	if (_hdl->mode == MTX_MODE_normal) {
+		current_thd = xTaskGetCurrentTaskHandle();
+		mtx_owner_thd = xSemaphoreGetMutexHolder(_hdl->rtos_mtx_hdl);
+		if(current_thd==mtx_owner_thd) {
+			ret = -EEXEC_DEADLK;
+			goto ERR_1;
+		}
 	}
 
 	/* try to obtain the mutex, in case it is not  */
 	taskEXIT_CRITICAL();
-	ret = (int)xSemaphoreTake(_hdl->rtos_mtx_hdl, portMAX_DELAY);
+
+	switch (_hdl->mode)
+	{
+		case MTX_MODE_normal:
+			ret = (int)xSemaphoreTake(_hdl->rtos_mtx_hdl, portMAX_DELAY);
+			break;
+		case MTX_MODE_recursive:
+			ret = (int)xSemaphoreTakeRecursive(_hdl->rtos_mtx_hdl, portMAX_DELAY);
+			break;
+		default:
+			ret = -ESTD_FAULT;
+			goto ERR_0;
+	}
+
 	switch (ret) {
 		case pdPASS : ret = EOK; break;
 		case pdFALSE : ret = -ESTD_FAULT; break;
@@ -624,7 +626,19 @@ int lib_thread__mutex_unlock (mutex_hdl_t _hdl)
 		goto ERR_0;
 	}
 
-	ret = (int)xSemaphoreGive(_hdl->rtos_mtx_hdl);
+	switch (_hdl->mode)
+	{
+		case MTX_MODE_normal:
+			ret = (int)xSemaphoreGive(_hdl->rtos_mtx_hdl);
+			break;
+		case MTX_MODE_recursive:
+			ret = (int)xSemaphoreGiveRecursive(_hdl->rtos_mtx_hdl);
+			break;
+		default:
+			ret = -ESTD_FAULT;
+			goto ERR_0;
+	}
+
 	switch (ret) {
 		case pdPASS : ret = EOK; break;
 		case pdFALSE : ret = -ESTD_PERM; break;
@@ -674,7 +688,20 @@ int lib_thread__mutex_trylock (mutex_hdl_t _hdl)
 		return -ESTD_BUSY;
 	}
 
-	ret = (int)xSemaphoreTake(_hdl->rtos_mtx_hdl, portMAX_DELAY);
+	taskEXIT_CRITICAL();
+	switch (_hdl->mode)
+	{
+		case MTX_MODE_normal:
+			ret = (int)xSemaphoreTake(_hdl->rtos_mtx_hdl, portMAX_DELAY);
+			break;
+		case MTX_MODE_recursive:
+			ret = (int)xSemaphoreTakeRecursive(_hdl->rtos_mtx_hdl, portMAX_DELAY);
+			break;
+		default:
+			ret = -ESTD_FAULT;
+			goto ERR_0;
+	}
+
 	switch (ret) {
 		case pdPASS : ret = EOK; break;
 		case pdFALSE : ret = -ESTD_PERM; break;
@@ -683,7 +710,6 @@ int lib_thread__mutex_trylock (mutex_hdl_t _hdl)
 		goto ERR_0;
 	}
 
-	taskEXIT_CRITICAL();
 
 	msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "mutex_trylock(): successul (ID:'%u')", _hdl->rtos_mtx_hdl);
 	return EOK;
@@ -1192,14 +1218,81 @@ int lib_thread__msleep (unsigned int _milliseconds)
 	return EOK;
 }
 
+/* *******************************************************************
+ * static function definitions
+ * ******************************************************************/
+
+/* *******************************************************************
+ * \brief	Initialization of a mutex object
+ * ---------
+ * \remark
+ * ---------
+ *
+ * \param	_hdl			[in/out] :	pointer to the handle of a mutex object
+ * 										to initialize
+ * \param   _mode					 :  selects if normal or recursive mutex is used
+ *
+ * ---------
+ * \return	'0', if successful, < '0' if not successful
+ * ******************************************************************/
+static int lib_thread__mutex_mode_init (mutex_hdl_t *_hdl, enum mtx_mode _mode)
+{
+	/* *******************************************************************
+	 * >>>>>	locals	<<<<<<
+	 * ******************************************************************/
+	int ret;
+	struct mutex_hdl_attr *mtx_hdl;
+
+	/* *******************************************************************
+	 * >>>>>	start of code section / check functions' arguments 	<<<<<<
+	 * ******************************************************************/
+	if (_hdl == NULL) {
+		ret = -EPAR_NULL;
+		goto ERR_0;
+	}
+
+	if (_mode >= MTX_MODE_CNT) {
+		ret = -ESTD_INVAL;
+		goto ERR_0;
+	}
+
+	mtx_hdl = pvPortMalloc(sizeof(struct mutex_hdl_attr));
+	if (mtx_hdl == NULL) {
+		ret = -ESTD_NOMEM;
+		goto ERR_0;
+	}
+
+	/* alloc memory in order to create a mutex */
+	mtx_hdl->rtos_mtx_hdl = xSemaphoreCreateMutex();
+	if (mtx_hdl->rtos_mtx_hdl == NULL) {
+		/* cleanup memory */
+		ret = -ESTD_FAULT;
+		goto ERR_1;
+	}
+
+	mtx_hdl->mode = _mode;
+	*_hdl = mtx_hdl;
+	msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "mutex_init(): successul (ID:'%u')", mtx_hdl->rtos_mtx_hdl);
+	return EOK;
+
+	ERR_1:
+	vPortFree(mtx_hdl);
+
+	ERR_0:
+	msg(LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "mutex_init(): failed with errror code %i", ret);
+	return ret;
+}
 
 
-
-
-
-
-
-
+/* *******************************************************************
+ * \brief	Thunk for FREERTOS thread processing
+ * ---------
+ * \remark
+ * ---------
+ * \parm  _arg [IN / OUT]	:	pass of the thread attributes
+ * ---------
+ * \return	void
+ * ******************************************************************/
 static void thunk_lib_thread__taskprocessing(void * _arg)
 {
 	struct thunk_task_attr * arg = (struct thunk_task_attr*)_arg;
