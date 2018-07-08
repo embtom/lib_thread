@@ -180,6 +180,18 @@ int lib_thread__msleep (unsigned int _milliseconds);
 int lib_thread__mutex_init (mutex_hdl_t *_hdl);
 
 /* *******************************************************************
+ * \brief	Initialization of a recursive mutex object
+ * ---------
+ * \remark
+ * ---------
+ * \param	_hdl			[in/out] :	pointer to the handle of a mutex object
+ * 										to initialize
+ * ---------
+ * \return	'0', if successful, < '0' if not successful
+ * ******************************************************************/
+int lib_thread__mutex_recursive_init (mutex_hdl_t *_hdl);
+
+/* *******************************************************************
  * \brief	Destroys an mutex again
  * ---------
  * \remark	Mutex must be unlocked
