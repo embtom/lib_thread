@@ -75,6 +75,7 @@ enum sgn_dequeue_attr {
 struct thread_hdl_attr {
 	TaskHandle_t rtos_thd_handle;
 	struct thunk_task_attr *thunk_attr;
+	char *thread_name;
 };
 
 struct thunk_task_attr {
@@ -221,6 +222,7 @@ int lib_thread__create (thread_hdl_t *_hdl, thread_worker_t *_worker, void *_arg
 		default										: ret = -ESTD_FAULT; break;
 	}
 
+	hdl->thread_name = _thread_name;
 	*_hdl = hdl;
 	return EOK;
 
