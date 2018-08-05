@@ -46,8 +46,9 @@
 /* *******************************************************************
  * defines
  * ******************************************************************/
-#define SEM_VALUE_MAX 				255
-#define M_LIB_THREAD__MODULE_ID 	"LIB_THD"
+#define M_LIB_THREAD__SIG_DESTROY		UINT32_MAX-1
+#define M_LIB_THREAD__SEM_VALUE_MAX 	255
+#define M_LIB_THREAD__MODULE_ID 		"LIB_THD"
 
 /* *******************************************************************
  * custom data types (e.g. enumerations, structures, unions)
@@ -57,11 +58,6 @@ enum mtx_mode {
 	MTX_MODE_normal,
 	MTX_MODE_recursive,
 	MTX_MODE_CNT
-};
-
-enum sgn_dequeue_attr {
-	DEQUEUE_ATTR_rcv,
-	DEQUEUE_ATTR_destroy
 };
 
 
@@ -130,7 +126,7 @@ struct sem_hdl_attr {
 static int lib_thread__mutex_mode_init (mutex_hdl_t *_hdl, enum mtx_mode _mode);
 static void thunk_lib_thread__taskprocessing(void * _arg);
 static int signal_waiter__sort_insert(struct queue_attr *_queue, struct signal_wait_node *_to_insert);
-static struct signal_wait_node * signal_waiter__get_top(struct queue_attr *_queue);
+static struct signal_wait_node* signal_waiter__get_top(struct queue_attr *_queue);
 static int signal_waiter__remove(struct queue_attr *_queue, struct signal_wait_node *_to_remove);
 
 /* *******************************************************************
@@ -791,38 +787,47 @@ int lib_thread__signal_init (signal_hdl_t *_hdl)
  * ******************************************************************/
 int lib_thread__signal_destroy (signal_hdl_t *_hdl)
 {
+	struct signal_wait_node *wakeup;
 	int ret= EOK;
-	int ret_val;
-	enum sgn_dequeue_attr dequeue_attr;
 
 	if (_hdl == NULL){
-		return -EPAR_NULL;
+		ret = -EPAR_NULL;
+		goto ERR_0;
 	}
+
 	if (*_hdl == NULL){
-		return -ESTD_INVAL;
+		ret = -ESTD_INVAL;
+		goto ERR_0;
 	}
 
-	dequeue_attr = DEQUEUE_ATTR_destroy;
-	//ret_val= xQueueSend( (*_hdl)->rtos_sgn_hdl , &dequeue_attr, 0);
-	if (ret_val == pdPASS ) {
-		ret = EOK;
-	}
-	else {
+	(*_hdl)->destroy = 1;
+	do {
+		wakeup = signal_waiter__get_top(&(*_hdl)->signal_waiter_list);
+		if (wakeup != NULL) {
+			ret = xTaskNotify(wakeup->rtos_thread_hdl, M_LIB_THREAD__SIG_DESTROY, eSetValueWithOverwrite );
+			if (ret == pdPASS) {
+				ret = signal_waiter__remove(&(*_hdl)->signal_waiter_list, wakeup);
+				vPortFree(wakeup);
+			}
+		}
+	}while(wakeup != NULL);
+
+	ret = lib_list__emty(&(*_hdl)->signal_waiter_list, 0, NULL);
+	if (ret == 0) {
 		ret = -ESTD_FAULT;
+		goto ERR_1;
 	}
 
-	if(ret == EOK) {
-	//	vQueueDelete((*_hdl)->rtos_sgn_hdl);
-		/* cleanup memory */
-		vPortFree(*_hdl);
-		(*_hdl) = NULL; /* destroy the address hold by the handle */
-	}
+	vPortFree(*_hdl);
+	(*_hdl) = NULL; /* destroy the address hold by the handle */
+	msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "signal_destroy(): successfully");
+	return EOK;
 
-	if (ret == EOK) {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "signal_destroy(): successul");
-	} else {
-		msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "signal_destroy(): failed with errror code %i", ret);
-	}
+	ERR_1:
+	(*_hdl)->destroy = 0;
+
+	ERR_0:
+	msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "signal_destroy(): failed with errror code %i", ret);
 	return ret;
 }
 
@@ -852,17 +857,9 @@ int lib_thread__signal_destroy (signal_hdl_t *_hdl)
  * ******************************************************************/
 int lib_thread__signal_send (signal_hdl_t _hdl)
 {
-	/* *******************************************************************
-	 * >>>>>	locals 	<<<<<<
-	 * ******************************************************************/
 	int ret;
-	enum sgn_dequeue_attr dequeue_attr;
 	struct signal_wait_node *wakeup;
 
-	//uint32_t rcv_status =2;
-	/* *******************************************************************
-	 * >>>>>	start of code section			<<<<<<
-	 * ******************************************************************/
 	if (_hdl == NULL){
 		return -EPAR_NULL;
 	}
@@ -870,7 +867,6 @@ int lib_thread__signal_send (signal_hdl_t _hdl)
 	if (_hdl->destroy) {
 		return -ESTD_PERM;
 	}
-
 
 	wakeup = signal_waiter__get_top(&_hdl->signal_waiter_list);
 	if (wakeup == NULL) {
@@ -885,19 +881,6 @@ int lib_thread__signal_send (signal_hdl_t _hdl)
 	else {
 		ret = -ESTD_BUSY;
 	}
-
-
-
-	/* the signal has already been created, hence just give it! */
-	dequeue_attr = DEQUEUE_ATTR_rcv;
-	//ret = xQueueSend( _hdl->rtos_sgn_hdl , &dequeue_attr, 0);
-	if (ret != pdPASS ) {
-		ret = -ESTD_FAULT;
-	}
-	else {
-		ret = EOK;
-	}
-
 	return EOK;
 }
 
@@ -916,7 +899,71 @@ int lib_thread__signal_send (signal_hdl_t _hdl)
 int lib_thread__signal_wait (signal_hdl_t _hdl)
 {
 	int ret_val, ret;
-	enum sgn_dequeue_attr dequeue_attr;
+	uint32_t notify_value;
+	struct signal_wait_node *sgn_wait_node;
+
+	if (_hdl == NULL){
+		ret = -EPAR_NULL;
+		goto ERR_0;
+	}
+
+	if (_hdl->destroy) {
+		return -ESTD_PERM;
+	}
+
+	sgn_wait_node = pvPortMalloc(sizeof(struct signal_wait_node));
+	if (sgn_wait_node == NULL) {
+		ret = -ESTD_NOMEM;
+		goto ERR_0;
+	}
+
+	sgn_wait_node->rtos_thread_prio = uxTaskPriorityGet(NULL);
+	sgn_wait_node->rtos_thread_hdl = xTaskGetCurrentTaskHandle();
+
+
+	ret = signal_waiter__sort_insert(&_hdl->signal_waiter_list,sgn_wait_node);
+	if (ret < EOK) {
+		goto ERR_1;
+	}
+
+	/* Wait to be notified of an interrupt. */
+	ret = xTaskNotifyWait( pdFALSE, ULONG_MAX, &notify_value, portMAX_DELAY );
+	if (ret != pdPASS) {
+		ret = -EHAL_ERROR;
+		goto ERR_0;
+	}
+
+	if (notify_value == M_LIB_THREAD__SIG_DESTROY) {
+		return -ESTD_PERM;
+	}
+	else {
+		return EOK;
+	}
+
+	ERR_1:
+	vPortFree(sgn_wait_node);
+
+	ERR_0:
+	msg (LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "%s() : failed with retval %i", __func__, ret );
+	return ret;
+}
+
+/* *******************************************************************
+ * \brief	Waiting for an signal with an time limit
+ * ---------
+ * \remark	The calling thread blocks unit the corresponding signal is triggered or
+ * 			the time runs out
+ *
+ * ---------
+ *
+ * \param	_hdl			[in] : 	handle to a signal object to wait
+ *
+ * ---------
+ * \return	'0', if successful, < '0' if not successful
+ * ******************************************************************/
+int lib_thread__signal_timedwait (signal_hdl_t _hdl, unsigned int _milliseconds)
+{
+	int ret_val, ret;
 	uint32_t notify_value;
 
 	struct signal_wait_node *sgn_wait_node;
@@ -946,64 +993,33 @@ int lib_thread__signal_wait (signal_hdl_t _hdl)
 	}
 
 	/* Wait to be notified of an interrupt. */
-	ret = xTaskNotifyWait( pdFALSE, ULONG_MAX, &notify_value, portMAX_DELAY );
-	if (ret == pdPASS) {
+	ret = xTaskNotifyWait( pdFALSE, ULONG_MAX, &notify_value, pdMS_TO_TICKS(_milliseconds));
+	switch(ret)
+	{
+		case pdFAIL :
+			ret = -EEXEC_TO;
+			break;
+		case pdPASS:
+			if (notify_value == M_LIB_THREAD__SIG_DESTROY) {
+				ret = -ESTD_PERM;
+			}
+			else {
+				ret = EOK;
+			}
+			break;
 
-		return EOK;
+		default:
+			ret = -EHAL_ERROR;
+			goto ERR_0;
 	}
-	else {
-		goto ERR_0;
-		ret = -EHAL_ERROR;
-	}
+	return ret;
 
 	ERR_1:
 	vPortFree(sgn_wait_node);
 
 	ERR_0:
-	msg (LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "%s() : failed with retval %i\n", __func__, ret );
-	return ret;
-}
-
-/* *******************************************************************
- * \brief	Waiting for an signal with an time limit
- * ---------
- * \remark	The calling thread blocks unit the corresponding signal is triggered or
- * 			the time runs out
- *
- * ---------
- *
- * \param	_hdl			[in] : 	handle to a signal object to wait
- *
- * ---------
- * \return	'0', if successful, < '0' if not successful
- * ******************************************************************/
-int lib_thread__signal_timedwait (signal_hdl_t _hdl, unsigned int _milliseconds)
-{
-	int ret_val, ret;
-	enum sgn_dequeue_attr dequeue_attr;
-
-	if (_hdl == NULL){
-		return -EPAR_NULL;
-	}
-
-	if (_hdl->destroy) {
-		return -ESTD_PERM;
-	}
-
-	//ret_val = xQueueReceive( _hdl->rtos_sgn_hdl, &dequeue_attr, ( portTickType )_milliseconds / portTICK_PERIOD_MS);
-	switch(ret_val){
-		case pdPASS : ret = EOK; break;
-		case errQUEUE_EMPTY: ret = -EEXEC_TO; break;
-		default : ret = -ESTD_FAULT; break;
-
-	}
-
-	if ((_hdl->destroy)||(dequeue_attr == DEQUEUE_ATTR_destroy)) {
-		return -ESTD_PERM;
-	}
-
-	return ret;
-}
+	msg (LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "%s() : failed with retval %i", __func__, ret );
+	return ret;}
 
 /* *******************************************************************
  * \brief	Initialization of a semaphore object
@@ -1027,7 +1043,7 @@ int lib_thread__sem_init (sem_hdl_t *_hdl, int _count)
 		goto ERR_0;
 	}
 
-	if (_count > SEM_VALUE_MAX) {
+	if (_count > M_LIB_THREAD__SEM_VALUE_MAX) {
 		ret = -ESTD_INVAL;
 		goto ERR_0;
 	}
@@ -1038,7 +1054,7 @@ int lib_thread__sem_init (sem_hdl_t *_hdl, int _count)
 		goto ERR_0;
 	}
 
-	sem_hdl->rtos_sem_hdl = xSemaphoreCreateCounting(SEM_VALUE_MAX, _count);
+	sem_hdl->rtos_sem_hdl = xSemaphoreCreateCounting(M_LIB_THREAD__SEM_VALUE_MAX, _count);
 	if (sem_hdl->rtos_sem_hdl == NULL) {
 		ret = -ESTD_NOMEM;
 		goto ERR_1;
@@ -1129,12 +1145,12 @@ int lib_thread__sem_timedwait (sem_hdl_t _hdl, int _milliseconds)
 		goto ERR_0;
 	}
 
-    msg (LOG_LEVEL_debug_prio_1, M_LIB_THREAD__MODULE_ID, "%s():  successfully\n",__func__);
+    msg (LOG_LEVEL_debug_prio_1, M_LIB_THREAD__MODULE_ID, "%s():  successfully",__func__);
 
 	return EOK;
 
 	ERR_0:
-	msg (LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "%s() : failed with retval %i\n", __func__, ret );
+	msg (LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "%s() : failed with retval %i", __func__, ret );
 	return ret;
 
 }
@@ -1161,11 +1177,11 @@ int lib_thread__sem_post (sem_hdl_t _hdl)
 		goto ERR_0;
 	}
 
-    msg (LOG_LEVEL_debug_prio_1, M_LIB_THREAD__MODULE_ID, "%s():  successfully\n",__func__);
+    msg (LOG_LEVEL_debug_prio_1, M_LIB_THREAD__MODULE_ID, "%s():  successfully",__func__);
 	return EOK;
 
 	ERR_0:
-	msg (LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "%s(): failed with retval %i\n",__func__, ret );
+	msg (LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "%s(): failed with retval %i",__func__, ret );
 	return ret;
 }
 
@@ -1201,12 +1217,12 @@ int lib_thread__sem_wait (sem_hdl_t _hdl)
 		goto ERR_0;
 	}
 
-    msg (LOG_LEVEL_debug_prio_1, M_LIB_THREAD__MODULE_ID, "%s():  successfully\n",__func__);
+    msg (LOG_LEVEL_debug_prio_1, M_LIB_THREAD__MODULE_ID, "%s():  successfully",__func__);
 
 	return EOK;
 
 	ERR_0:
-	msg (LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "%s() : failed with retval %i\n", __func__, ret );
+	msg (LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "%s() : failed with retval %i", __func__, ret );
 	return ret;
 }
 
@@ -1254,11 +1270,11 @@ int lib_thread__sem_trywait (sem_hdl_t _hdl)
 		goto ERR_0;
 	}
 
-	msg (LOG_LEVEL_debug_prio_1, M_LIB_THREAD__MODULE_ID, "%s(): successfully\n",__func__);
+	msg (LOG_LEVEL_debug_prio_1, M_LIB_THREAD__MODULE_ID, "%s(): successfully",__func__);
 	return EOK;
 
 	ERR_0:
-	msg (LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "%s(): failed with retval %i\n",__func__, ret );
+	msg (LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "%s(): failed with retval %i",__func__, ret );
 	return ret;
 }
 
@@ -1411,7 +1427,7 @@ static int signal_waiter__sort_insert(struct queue_attr *_queue, struct signal_w
 	return ret;
 }
 
-static struct signal_wait_node * signal_waiter__get_top(struct queue_attr *_queue)
+static struct signal_wait_node* signal_waiter__get_top(struct queue_attr *_queue)
 {
 	int ret;
 	struct list_node *itr_node;
