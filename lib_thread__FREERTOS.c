@@ -678,14 +678,9 @@ int lib_thread__mutex_unlock (mutex_hdl_t _hdl)
  * ******************************************************************/
 int lib_thread__mutex_trylock (mutex_hdl_t _hdl)
 {
-	/* *******************************************************************
-	 * >>>>>	locals 	<<<<<<
-	 * ******************************************************************/
 	int ret;
 	TaskHandle_t mtx_owner_thd;
-	/* *******************************************************************
-	 * >>>>>	start of code section			<<<<<<
-	 * ******************************************************************/
+
 	if (_hdl == NULL){
 		return -EPAR_NULL;
 	}
@@ -861,7 +856,8 @@ int lib_thread__signal_send (signal_hdl_t _hdl)
 	struct signal_wait_node *wakeup;
 
 	if (_hdl == NULL){
-		return -EPAR_NULL;
+		ret = -EPAR_NULL;
+		goto ERR_0;
 	}
 
 	if (_hdl->destroy) {
@@ -874,14 +870,23 @@ int lib_thread__signal_send (signal_hdl_t _hdl)
 	}
 
 	ret = xTaskNotify(wakeup->rtos_thread_hdl, 0xfff, eSetValueWithoutOverwrite );
-	if (ret == pdPASS) {
-		ret = signal_waiter__remove(&_hdl->signal_waiter_list, wakeup);
-		vPortFree(wakeup);
-	}
-	else {
+	if (ret != pdPASS) {
 		ret = -ESTD_BUSY;
+		goto ERR_0;
 	}
-	return EOK;
+
+	ret = signal_waiter__remove(&_hdl->signal_waiter_list, wakeup);
+	vPortFree(wakeup);
+	if (ret != EOK) {
+		goto ERR_0;
+	}
+
+	return ret;
+
+	ERR_0:
+	msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "signal_send(): failed with errror code %i", ret);
+	return ret;
+
 }
 
 /* *******************************************************************
@@ -907,9 +912,9 @@ int lib_thread__signal_wait (signal_hdl_t _hdl)
 		goto ERR_0;
 	}
 
-	if (_hdl->destroy) {
-		return -ESTD_PERM;
-	}
+//	if (_hdl->destroy) {
+//		return -ESTD_PERM;
+//	}
 
 	sgn_wait_node = pvPortMalloc(sizeof(struct signal_wait_node));
 	if (sgn_wait_node == NULL) {
@@ -965,6 +970,7 @@ int lib_thread__signal_timedwait (signal_hdl_t _hdl, unsigned int _milliseconds)
 {
 	int ret_val, ret;
 	uint32_t notify_value;
+	TaskHandle_t current_task;
 
 	struct signal_wait_node *sgn_wait_node;
 
@@ -973,9 +979,12 @@ int lib_thread__signal_timedwait (signal_hdl_t _hdl, unsigned int _milliseconds)
 		goto ERR_0;
 	}
 
-	if (_hdl->destroy) {
-		return -ESTD_PERM;
-	}
+	current_task = xTaskGetCurrentTaskHandle();
+
+//	if (_hdl->destroy) {
+//		current_task->ulNotifiedValue = 0;
+//		return -ESTD_PERM;
+//	}
 
 	sgn_wait_node = pvPortMalloc(sizeof(struct signal_wait_node));
 	if (sgn_wait_node == NULL) {
@@ -997,6 +1006,7 @@ int lib_thread__signal_timedwait (signal_hdl_t _hdl, unsigned int _milliseconds)
 	switch(ret)
 	{
 		case pdFAIL :
+			signal_waiter__remove(&_hdl->signal_waiter_list, sgn_wait_node);
 			ret = -EEXEC_TO;
 			break;
 		case pdPASS:
@@ -1009,6 +1019,7 @@ int lib_thread__signal_timedwait (signal_hdl_t _hdl, unsigned int _milliseconds)
 			break;
 
 		default:
+			signal_waiter__remove(&_hdl->signal_waiter_list, sgn_wait_node);
 			ret = -EHAL_ERROR;
 			goto ERR_0;
 	}
