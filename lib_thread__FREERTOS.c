@@ -408,6 +408,11 @@ int lib_thread__getname(thread_hdl_t _hdl, char * _name, int _maxlen)
 	}
 
 	name_length = strlen(name) +1;
+	if(name_length <= 1) {
+		ret = -ESTD_NOENT;
+		goto ERR_0;
+	}
+
 	if(name_length > _maxlen) {
 		ret = -ESTD_RANGE;
 		goto ERR_0;
