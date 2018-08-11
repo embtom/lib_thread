@@ -428,19 +428,22 @@ int lib_thread__getname(thread_hdl_t _hdl, char * _name, int _maxlen)
 		goto ERR_0;
 	}
 
-	if(_hdl->thread_name != NULL) {
-		if (_hdl->thread_name_len >= _maxlen) {
-			len = _maxlen;
-		}
-		else {
-			len = _hdl->thread_name_len;
-		}
-		memcpy(_name,_hdl->thread_name, len);
-		return EOK;
+	if(_hdl->thread_name == NULL) {
+		ret = ENOENT;
+		ret = convert_std_errno(ret);
+		goto ERR_0;
 	}
 
-	ret = ENOENT;
-	ret = convert_std_errno(ret);
+	if (_hdl->thread_name_len >= _maxlen) {
+		len = _maxlen;
+		ret = -ESTD_RANGE;
+	}
+	else {
+		len = _hdl->thread_name_len;
+		ret = EOK;
+	}
+	memcpy(_name,_hdl->thread_name, len);
+	return ret;
 
 	ERR_0:
 	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i\n",__func__, ret );
