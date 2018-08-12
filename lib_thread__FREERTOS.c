@@ -39,7 +39,6 @@
 #include <lib_list.h>
 
 /* project */
-//#include <stm32f1xx.h>
 #include "lib_thread.h" /* interface  */
 
 
@@ -60,22 +59,9 @@ enum mtx_mode {
 	MTX_MODE_CNT
 };
 
-
-//extern void* pxCurrentTCB;
-//static inline unsigned int isInterrupt()
-//{
-//    return (SCB->ICSR & SCB_ICSR_VECTACTIVE_Msk) != 0 ;
-//}
-/* *******************************************************************
- * static function declarations
- * ******************************************************************/
-
-struct thread_hdl_attr {
-	TaskHandle_t rtos_thread_hdl;
-	struct thunk_task_attr *thunk_attr;
-	char *thread_name;
-};
-
+/***********************************/
+/* helper structures 			   */
+/***********************************/
 struct thunk_task_attr {
 	SemaphoreHandle_t sem_finish;
 	thread_worker_t *worker;
@@ -84,41 +70,45 @@ struct thunk_task_attr {
 	void *retval;
 };
 
-/* *******************************************************************
- * \brief	structure which defines the opaque mutex handle
- * ---------
- * \remark	in the world of FREERTOS a mutex corresponds to a binary
- * 			semaphore which comprises of an priorirty inheritance
- * 			mechanism
- * ******************************************************************/
-struct mutex_hdl_attr {
-	SemaphoreHandle_t rtos_mtx_hdl;
-	enum mtx_mode mode;
-};
-
-/* *******************************************************************
- * \brief	structure which defines the opaque signal handle
- * ---------
- * ******************************************************************/
-struct signal_hdl_attr {
-	struct queue_attr  signal_waiter_list;
-	//QueueHandle_t rtos_sgn_hdl;
-	unsigned int destroy;
-};
-
 struct signal_wait_node {
 	struct list_node node;
 	xTaskHandle rtos_thread_hdl;
 	unsigned int rtos_thread_prio;
 };
 
-/* *******************************************************************
- * \brief	structure which defines the opaque semphore handle
- * ---------
- * ******************************************************************/
+/***********************************/
+/* OPAQUE INTERFACE STRUCTURES     */
+/***********************************/
+
+/* structure which defines the opaque thread handle*/
+struct thread_hdl_attr {
+	TaskHandle_t rtos_thread_hdl;
+	struct thunk_task_attr *thunk_attr;
+	char *thread_name;
+};
+
+/* structure which defines the opaque mutex handle*/
+struct mutex_hdl_attr {
+	SemaphoreHandle_t rtos_mtx_hdl;
+	enum mtx_mode mode;
+};
+
+/* structure which defines the opaque signal handle */
+struct signal_hdl_attr {
+	struct queue_attr  signal_waiter_list;
+	//QueueHandle_t rtos_sgn_hdl;
+	unsigned int destroy;
+};
+
+/* structure which defines the opaque semphore handle */
 struct sem_hdl_attr {
 	SemaphoreHandle_t rtos_sem_hdl;
 };
+
+struct condvar_hdl_attr {
+
+};
+
 
 /* *******************************************************************
  * static function declarations
@@ -152,7 +142,6 @@ static int signal_waiter__remove(struct queue_attr *_queue, struct signal_wait_n
  * ******************************************************************/
 int lib_thread__init(enum process_sched _sched, int _pcur)
 {
-	/* TODO @ BS: remove just return  */
 	return 0;
 }
 
@@ -175,17 +164,12 @@ int lib_thread__init(enum process_sched _sched, int _pcur)
  * ******************************************************************/
 int lib_thread__create (thread_hdl_t *_hdl, thread_worker_t *_worker, void *_arg, int _relative_priority, const char *_thread_name)
 {
-	/* *******************************************************************
-	 * >>>>>	locals 												<<<<<<
-	 * ******************************************************************/
 	unsigned long prio;
 	int ret;
 	struct thread_hdl_attr *hdl;
 	struct thunk_task_attr *thunk_attr;
 
-	/* *******************************************************************
-	 * >>>>>	start of code section								<<<<<<
-	 * ******************************************************************/
+
 	if ((_hdl == NULL) || (_worker == NULL)) {
 		ret = -EPAR_NULL;
 		goto ERR_0;
@@ -629,15 +613,9 @@ int lib_thread__mutex_lock (mutex_hdl_t _hdl)
  * ******************************************************************/
 int lib_thread__mutex_unlock (mutex_hdl_t _hdl)
 {
-	/* *******************************************************************
-	 * >>>>>	locals 	<<<<<<
-	 * ******************************************************************/
 	int ret;
 	TaskHandle_t mtx_owner_thd, current_thd;
 
-	/* *******************************************************************
-	 * >>>>>	start of code section			<<<<<<
-	 * ******************************************************************/
 	if (_hdl == NULL){
 		ret = -EPAR_NULL;
 		goto ERR_0;
@@ -1259,18 +1237,6 @@ int lib_thread__sem_wait (sem_hdl_t _hdl)
 }
 
 /* *******************************************************************
- * \brief	Decrement semaphore and if count <=0 calling thread is blocked
- * ---------
- * \remark	If the value of the semaphore is negative, the calling process blocks;
- * 			one of the blocked processes wakes up when another process calls sem_post
- * ---------
- *
- * \param	_hdl				[in] :	handle of a semaphore object
- *
- * ---------
- * \return	'0', if successful, < '0' if not successful
- * ******************************************************************/
-/* *******************************************************************
  * \brief	Decrement semaphore and if count <=0 return with error
  * ---------
  * \remark	If the value of the semaphore is negative, the calling process blocks;
@@ -1320,11 +1286,41 @@ int lib_thread__sem_trywait (sem_hdl_t _hdl)
  * \return	EOK				Success
  *			-EPAR_NULL		NULL pointer specified for _cond
  *			-ESTD_BUSY		_cond is registered and not yet destroyed.
- *			-ESTD_NOMEM		High-level OSes only: Insufficient memory available to initialize the condvar
- *			-ESTD_AGAIN		High-level OSes only: Insufficient system resources available to initialize the condvar
+ *			-ESTD_NOMEM		Insufficient memory available to initialize the condvar
+ *			-ESTD_AGAIN		Insufficient system resources available to initialize the condvar
  * ****************************************************************************/
 int lib_thread__cond_init(cond_hdl_t *_hdl)
 {
+	int ret;
+	struct condvar_hdl_attr *cond_hdl;
+
+	if (_hdl == NULL) {
+		ret = -EPAR_NULL;
+		goto ERR_0;
+	}
+
+	cond_hdl = pvPortMalloc(sizeof(struct condvar_hdl_attr));
+	if (cond_hdl == NULL) {
+		ret = -ESTD_NOMEM;
+		goto ERR_0;
+	}
+
+	/* alloc memory in order to create a mutex */
+
+
+	*_hdl = cond_hdl;
+	msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "cond_init(): successul (ID:'%u')", 0);
+	return EOK;
+
+	ERR_1:
+	vPortFree(cond_hdl);
+
+	ERR_0:
+	msg(LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "mutex_init(): failed with errror code %i", ret);
+	return ret;
+
+
+
 	return EOK;
 }
 
@@ -1489,15 +1485,9 @@ int lib_thread__cond_timedwait(cond_hdl_t _hdl, mutex_hdl_t _mtx, int _tmoms)
  * ******************************************************************/
 static int lib_thread__mutex_mode_init (mutex_hdl_t *_hdl, enum mtx_mode _mode)
 {
-	/* *******************************************************************
-	 * >>>>>	locals	<<<<<<
-	 * ******************************************************************/
 	int ret;
 	struct mutex_hdl_attr *mtx_hdl;
 
-	/* *******************************************************************
-	 * >>>>>	start of code section / check functions' arguments 	<<<<<<
-	 * ******************************************************************/
 	if (_hdl == NULL) {
 		ret = -EPAR_NULL;
 		goto ERR_0;
