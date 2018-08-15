@@ -48,6 +48,7 @@
 #define M_LIB_THREAD__SIG_DESTROY		UINT32_MAX-1
 #define M_LIB_THREAD__SEM_VALUE_MAX 	255
 #define M_LIB_THREAD__MODULE_ID 		"LIB_THD"
+#define M_LIB_THREAD__TIMEOUT_INFINITE  -1
 
 /* *******************************************************************
  * custom data types (e.g. enumerations, structures, unions)
@@ -106,7 +107,9 @@ struct sem_hdl_attr {
 };
 
 struct condvar_hdl_attr {
-
+	SemaphoreHandle_t cond_sem_hdl;
+	SemaphoreHandle_t mtx_waiting_threads_hdl;
+	unsigned int number_of_waiting_threads;
 };
 
 
@@ -251,16 +254,10 @@ int lib_thread__create (thread_hdl_t *_hdl, thread_worker_t *_worker, void *_arg
  * ******************************************************************/
 int lib_thread__join (thread_hdl_t *_hdl, void **_ret_val)
 {
-	/* *******************************************************************
-	 * >>>>>	locals 	<<<<<<
-	 * ******************************************************************/
 	TaskHandle_t current_thd;
 	int expired_thread_id = 0;
 	int ret;
 
-	/* *******************************************************************
-	 * >>>>>	start of code section			<<<<<<
-	 * ******************************************************************/
 	if (_hdl == NULL) {
 		ret = -EPAR_NULL;
 		goto ERR_0;
@@ -477,16 +474,10 @@ int lib_thread__mutex_recursive_init (mutex_hdl_t *_hdl)
  * ******************************************************************/
 int lib_thread__mutex_destroy (mutex_hdl_t *_hdl)
 {
-	/* *******************************************************************
-	 * >>>>>	locals 	<<<<<<
-	 * ******************************************************************/
 	int ret;
 	unsigned int mtx_id;
 	TaskHandle_t taskhandle;
 
-	/* *******************************************************************
-	 * >>>>>	start of code section / check functions' arguments	<<<<<<
-	 * ******************************************************************/
 	if (_hdl == NULL){
 		ret = -EPAR_NULL;
 		goto ERR_0;
@@ -534,15 +525,10 @@ int lib_thread__mutex_destroy (mutex_hdl_t *_hdl)
  * ******************************************************************/
 int lib_thread__mutex_lock (mutex_hdl_t _hdl)
 {
-	/* *******************************************************************
-	 * >>>>>	locals 	<<<<<<
-	 * ******************************************************************/
 	int ret;
 	TaskHandle_t current_thd, mtx_owner_thd;
 
-	/* *******************************************************************
-	 * >>>>>	start of code section								<<<<<<
-	 * ******************************************************************/
+
 	if (_hdl == NULL){
 		ret = -EPAR_NULL;
 		goto ERR_0;
@@ -1048,7 +1034,7 @@ int lib_thread__sem_init (sem_hdl_t *_hdl, int _count)
 	int ret;
 	sem_hdl_t sem_hdl;
 
-	if (_hdl == NULL){
+	if (_hdl == NULL) {
 		ret = -EPAR_NULL;
 		goto ERR_0;
 	}
@@ -1144,7 +1130,7 @@ int lib_thread__sem_timedwait (sem_hdl_t _hdl, int _milliseconds)
 		goto ERR_0;
 	}
 
-	ret_val = xSemaphoreTake(_hdl->rtos_sem_hdl, _milliseconds / portTICK_PERIOD_MS);
+	ret_val = xSemaphoreTake(_hdl->rtos_sem_hdl, pdMS_TO_TICKS(_milliseconds)); //_milliseconds / portTICK_PERIOD_MS
 	switch(ret_val) {
 		case pdPASS : ret = EOK; break;
 		case pdFAIL : ret = -EEXEC_TO; break;
@@ -1305,12 +1291,24 @@ int lib_thread__cond_init(cond_hdl_t *_hdl)
 		goto ERR_0;
 	}
 
-	/* alloc memory in order to create a mutex */
+	cond_hdl->mtx_waiting_threads_hdl = xSemaphoreCreateMutex();
+	if (cond_hdl->mtx_waiting_threads_hdl == NULL) {
+		ret = -ESTD_NOMEM;
+		goto ERR_1;
+	}
 
+	cond_hdl->cond_sem_hdl = xSemaphoreCreateCounting(M_LIB_THREAD__SEM_VALUE_MAX, 0);
+	if (cond_hdl->cond_sem_hdl == NULL) {
+		ret = -ESTD_NOMEM;
+		goto ERR_2;
+	}
 
 	*_hdl = cond_hdl;
 	msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "cond_init(): successul (ID:'%u')", 0);
 	return EOK;
+
+	ERR_2:
+	vSemaphoreDelete(cond_hdl->mtx_waiting_threads_hdl);
 
 	ERR_1:
 	vPortFree(cond_hdl);
@@ -1318,10 +1316,6 @@ int lib_thread__cond_init(cond_hdl_t *_hdl)
 	ERR_0:
 	msg(LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "mutex_init(): failed with errror code %i", ret);
 	return ret;
-
-
-
-	return EOK;
 }
 
 /* *************************************************************************//**
@@ -1346,7 +1340,32 @@ int lib_thread__cond_init(cond_hdl_t *_hdl)
  * ****************************************************************************/
 int lib_thread__cond_destroy(cond_hdl_t *_hdl)
 {
+	int ret;
+
+	if (_hdl == NULL){
+		ret = -EPAR_NULL;
+		goto ERR_0;
+	}
+
+	if (*_hdl == NULL) {
+		ret = -ESTD_INVAL;
+		goto ERR_0;
+	}
+
+	if ((*_hdl)->number_of_waiting_threads> 0) {
+		ret = -ESTD_BUSY;
+		goto ERR_0;
+	}
+
+	vSemaphoreDelete((*_hdl)->mtx_waiting_threads_hdl);
+	vSemaphoreDelete((*_hdl)->cond_sem_hdl);
+	vPortFree((*_hdl));
+	*_hdl = NULL;
 	return EOK;
+
+	ERR_0:
+	msg(LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "sem_destroy(): failed with errror code %i", ret);
+	return ret;
 }
 
 /* *************************************************************************//**
@@ -1372,7 +1391,27 @@ int lib_thread__cond_destroy(cond_hdl_t *_hdl)
  * ****************************************************************************/
 int lib_thread__cond_signal(cond_hdl_t _hdl)
 {
+	int ret;
+
+	/* check arguments for validity */
+	if (_hdl == NULL) {
+		ret = -EPAR_NULL;
+		goto ERR_0;
+	}
+
+	xSemaphoreTake(_hdl->mtx_waiting_threads_hdl, portMAX_DELAY );
+	if(_hdl->number_of_waiting_threads > 0) {
+		xSemaphoreGive(_hdl->cond_sem_hdl);
+		_hdl->number_of_waiting_threads--;
+	}
+	xSemaphoreGive(_hdl->mtx_waiting_threads_hdl);
+
 	return EOK;
+
+
+	ERR_0:
+	msg(LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "cond_signal(): failed with errror code %i", ret);
+	return ret;
 }
 
 /* *************************************************************************//**
@@ -1396,7 +1435,43 @@ int lib_thread__cond_signal(cond_hdl_t _hdl)
  * ****************************************************************************/
 int lib_thread__cond_broadcast(cond_hdl_t _hdl)
 {
+	int ret;
+
+	/* check arguments for validity */
+	if (_hdl == NULL) {
+		ret = -EPAR_NULL;
+		goto ERR_0;
+	}
+
+	while (_hdl->number_of_waiting_threads > 0) {
+
+		//MTX lock
+		ret = xSemaphoreTake(_hdl->mtx_waiting_threads_hdl, portMAX_DELAY );
+		if (ret != pdPASS) {
+			ret = -ESTD_FAULT;
+			goto ERR_0;
+		}
+
+		if(_hdl->number_of_waiting_threads > 0) {
+			ret = xSemaphoreGive(_hdl->cond_sem_hdl);
+			if (ret != pdPASS) {
+				ret = -ESTD_FAULT;
+				goto ERR_1;
+			}
+			_hdl->number_of_waiting_threads--;
+		}
+		//MTX unlock
+		xSemaphoreGive(_hdl->mtx_waiting_threads_hdl);
+	}
+
 	return EOK;
+
+	ERR_1:
+	xSemaphoreGive(_hdl->mtx_waiting_threads_hdl);
+
+	ERR_0:
+	msg(LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "cond_signal(): failed with errror code %i", ret);
+	return ret;
 }
 
 /* *************************************************************************//**
@@ -1428,7 +1503,7 @@ int lib_thread__cond_broadcast(cond_hdl_t _hdl)
  * ****************************************************************************/
 int lib_thread__cond_wait(cond_hdl_t _hdl, mutex_hdl_t _mtx)
 {
-	return EOK;
+	return lib_thread__cond_timedwait(_hdl, _mtx, LIB_THREAD__TIMEOUT_INFINITE);
 }
 
 /* *************************************************************************//**
@@ -1464,7 +1539,71 @@ int lib_thread__cond_wait(cond_hdl_t _hdl, mutex_hdl_t _mtx)
  * ****************************************************************************/
 int lib_thread__cond_timedwait(cond_hdl_t _hdl, mutex_hdl_t _mtx, int _tmoms)
 {
-	return EOK;
+	int ret, ret2;
+	TickType_t timeout;
+
+	/* check arguments for validity */
+	if ((_hdl == NULL) || (_mtx == NULL)) {
+		ret = -EPAR_NULL;
+		goto ERR_0;
+	}
+
+	//TODO check initialized
+
+	/* evaluate specified timeout */
+	switch (_tmoms){
+		case 0:
+			/* zero timeout specified -> return immediate timeout error */
+			return -EEXEC_TO;
+		case LIB_THREAD__TIMEOUT_INFINITE:
+			/* infinite timeout specified -> just continue */
+			timeout = portMAX_DELAY;
+			break;
+		default:
+			timeout = pdMS_TO_TICKS(_tmoms);
+			break;
+	}
+
+	ret = xSemaphoreTake(_hdl->mtx_waiting_threads_hdl, portMAX_DELAY);
+	if (ret != pdPASS) {
+		goto ERR_0;
+	}
+	_hdl->number_of_waiting_threads++;
+	xSemaphoreGive(_hdl->mtx_waiting_threads_hdl);
+
+	ret = lib_thread__mutex_unlock(_mtx);
+	if (ret < EOK) {
+		xSemaphoreTake(_hdl->mtx_waiting_threads_hdl, portMAX_DELAY);
+		_hdl->number_of_waiting_threads--;
+		xSemaphoreGive(_hdl->mtx_waiting_threads_hdl);
+		goto ERR_0;
+	}
+
+	ret = xSemaphoreTake(_hdl->cond_sem_hdl, timeout);
+	switch(ret) {
+		case pdPASS : ret = EOK; break;
+		case pdFAIL : ret = -EEXEC_TO; break;
+		default : ret = -ESTD_FAULT;
+	}
+
+	/*Lock of the entangled condition mutex again */
+	lib_thread__mutex_lock(_mtx);
+
+	ret2 = xSemaphoreTake(_hdl->mtx_waiting_threads_hdl, portMAX_DELAY);
+	_hdl->number_of_waiting_threads--;
+	xSemaphoreGive(_hdl->mtx_waiting_threads_hdl);
+	if(ret2 !=pdPASS) {
+		ret = -ESTD_FAULT;
+		goto ERR_0;
+	}
+
+	if ((ret == EOK) || (ret == -EEXEC_TO)) {
+		return ret;
+	}
+
+	ERR_0:
+	msg(LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "cond_timedwait(): failed with errror code %i", ret);
+	return ret;
 }
 /* *******************************************************************
  * static function definitions
@@ -1508,7 +1647,7 @@ static int lib_thread__mutex_mode_init (mutex_hdl_t *_hdl, enum mtx_mode _mode)
 	mtx_hdl->rtos_mtx_hdl = xSemaphoreCreateMutex();
 	if (mtx_hdl->rtos_mtx_hdl == NULL) {
 		/* cleanup memory */
-		ret = -ESTD_FAULT;
+		ret = -ESTD_NOMEM;
 		goto ERR_1;
 	}
 
