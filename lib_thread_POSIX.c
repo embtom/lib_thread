@@ -62,8 +62,8 @@ struct mutex_hdl_attr {
 struct signal_hdl_attr {
 	pthread_cond_t cond_hdl;
 	pthread_mutex_t mtx_hdl;
-	unsigned int number_of_waiting_threads;
-	unsigned int number_of_outstanding_signals;
+	unsigned int number_of_signal_waiting_threads;
+	unsigned int number_of_signal_outstanding;
 	unsigned int destroy_active;
 };
 
@@ -73,6 +73,8 @@ struct sem_hdl_attr {
 
 struct condvar_hdl_attr {
 	pthread_cond_t	cond;					// condition variable
+	unsigned int number_of_condition_waiting_threads;
+	unsigned int number_of_condition_outstanding;
 };
 
 
@@ -815,8 +817,8 @@ int lib_thread__signal_init (signal_hdl_t *_hdl)
 		goto ERR_5;
 	}
 
-	hdl->number_of_waiting_threads = 0;
-	hdl->number_of_outstanding_signals = 0;
+	hdl->number_of_signal_waiting_threads = 0;
+	hdl->number_of_signal_outstanding = 0;
 	hdl->destroy_active = 0;
 
 	*_hdl = hdl;
@@ -889,14 +891,14 @@ int lib_thread__signal_destroy (signal_hdl_t *_hdl)
 	}
 
 	(*_hdl)->destroy_active = 1;
-	tmp_number_of_outstanding_signals = (*_hdl)->number_of_outstanding_signals;
-	(*_hdl)->number_of_outstanding_signals = 0;
+	tmp_number_of_outstanding_signals = (*_hdl)->number_of_signal_outstanding;
+	(*_hdl)->number_of_signal_outstanding = 0;
 
 	ret = pthread_mutex_unlock(&(*_hdl)->mtx_hdl);
 	if (ret != EOK) {
 		ret = convert_std_errno(ret);
 		(*_hdl)->destroy_active = 0;
-		(*_hdl)->number_of_outstanding_signals = tmp_number_of_outstanding_signals;
+		(*_hdl)->number_of_signal_outstanding = tmp_number_of_outstanding_signals;
 		goto ERR_0;
 	}
 
@@ -905,13 +907,13 @@ int lib_thread__signal_destroy (signal_hdl_t *_hdl)
 		if (ret != 0) {
 			ret = convert_std_errno(ret);
 			pthread_mutex_lock(&(*_hdl)->mtx_hdl);
-			(*_hdl)->number_of_outstanding_signals = tmp_number_of_outstanding_signals;
+			(*_hdl)->number_of_signal_outstanding = tmp_number_of_outstanding_signals;
 			(*_hdl)->destroy_active = 0;
 			goto ERR_1;
 		}
 
 		pthread_mutex_lock(&(*_hdl)->mtx_hdl);
-		while ((*_hdl)->number_of_waiting_threads) {
+		while ((*_hdl)->number_of_signal_waiting_threads) {
 			/* check the number of threads still waiting */
 			pthread_mutex_unlock(&(*_hdl)->mtx_hdl);
 			/* wait briefly to give the waiting threads some execution time */
@@ -994,16 +996,16 @@ int lib_thread__signal_send (signal_hdl_t _hdl)
 		goto ERR_1;
 	}	/* check whether there is any pending signal */
 
-	if (_hdl->number_of_outstanding_signals > 0) {
+	if (_hdl->number_of_signal_outstanding > 0) {
 		/* decrement number of pending signals */
-		_hdl->number_of_outstanding_signals--;
+		_hdl->number_of_signal_outstanding--;
 
 		/* unlock signal mutex */
 		ret = pthread_mutex_unlock(&_hdl->mtx_hdl);
 		if (ret != 0){	/* should never happen */
 			ret = convert_std_errno(ret);
 			/* increment number of pending signals again as we are not able to unlock the signal's mutex (which is mandatory for actually processing the signal) */
-			_hdl->number_of_outstanding_signals++;
+			_hdl->number_of_signal_outstanding++;
 			return ret;
 		}
 
@@ -1013,7 +1015,7 @@ int lib_thread__signal_send (signal_hdl_t _hdl)
 			ret = convert_std_errno(ret);
 			/* increment number of pending signals again as we are not able to send the signal */
 			pthread_mutex_lock(&_hdl->mtx_hdl);
-			_hdl->number_of_outstanding_signals++;
+			_hdl->number_of_signal_outstanding++;
 			pthread_mutex_unlock(&_hdl->mtx_hdl);
 			return ret;
 		}
@@ -1074,8 +1076,8 @@ int lib_thread__signal_wait (signal_hdl_t _hdl)
 		ret = -ESTD_PERM;
 	}
 	else {
-		_hdl->number_of_waiting_threads++;
-		_hdl->number_of_outstanding_signals++;
+		_hdl->number_of_signal_waiting_threads++;
+		_hdl->number_of_signal_outstanding++;
 
 		/*Set a cleanup handler to threat the thread cancellation */
 		pthread_cleanup_push(&lib_thread__signal_pthread_cancel_handler, _hdl);
@@ -1086,13 +1088,13 @@ int lib_thread__signal_wait (signal_hdl_t _hdl)
 			ret = pthread_cond_wait(&_hdl->cond_hdl, &_hdl->mtx_hdl);
 			if (ret != EOK) {
 				ret = convert_std_errno(ret);
-				_hdl->number_of_waiting_threads--;
-				_hdl->number_of_outstanding_signals--;
+				_hdl->number_of_signal_waiting_threads--;
+				_hdl->number_of_signal_outstanding--;
 				break;
 			}
 
 			/* ensure that no spurious wakeup occurred (which are very well possible according to the standard) */
-			if (_hdl->number_of_waiting_threads != _hdl->number_of_outstanding_signals) {
+			if (_hdl->number_of_signal_waiting_threads != _hdl->number_of_signal_outstanding) {
 				break;
 			}
 
@@ -1100,7 +1102,7 @@ int lib_thread__signal_wait (signal_hdl_t _hdl)
 		pthread_cleanup_pop(0);
 	}
 
-	_hdl->number_of_waiting_threads--;
+	_hdl->number_of_signal_waiting_threads--;
 
 	if (_hdl->destroy_active) {
 		ret = -ESTD_PERM;
@@ -1177,8 +1179,8 @@ int lib_thread__signal_timedwait (signal_hdl_t _hdl, unsigned int _milliseconds)
 		ret = -ESTD_PERM;
 	}
 	else {
-		_hdl->number_of_waiting_threads++;
-		_hdl->number_of_outstanding_signals++;
+		_hdl->number_of_signal_waiting_threads++;
+		_hdl->number_of_signal_outstanding++;
 		pthread_cleanup_push(&lib_thread__signal_pthread_cancel_handler, _hdl);
 
 		signal_id = &_hdl->cond_hdl;
@@ -1189,20 +1191,20 @@ int lib_thread__signal_timedwait (signal_hdl_t _hdl, unsigned int _milliseconds)
 			ret = pthread_cond_timedwait(&_hdl->cond_hdl, &_hdl->mtx_hdl,&actual_time);
 			if (ret != EOK) {
 				ret = convert_std_errno(ret);
-				_hdl->number_of_waiting_threads--;
-				_hdl->number_of_outstanding_signals--;
+				_hdl->number_of_signal_waiting_threads--;
+				_hdl->number_of_signal_outstanding--;
 				break;
 			}
 
 			/* ensure that no spurious wakeup occurred (which are very well possible according to the standard) */
-			if (_hdl->number_of_waiting_threads != _hdl->number_of_outstanding_signals) {
+			if (_hdl->number_of_signal_waiting_threads != _hdl->number_of_signal_outstanding) {
 				break;
 			}
 		}
 		pthread_cleanup_pop(0);
 	}
 
-	_hdl->number_of_waiting_threads--;
+	_hdl->number_of_signal_waiting_threads--;
 
 	if (_hdl->destroy_active) {
 		ret = -ESTD_PERM;
@@ -1537,6 +1539,10 @@ int lib_thread__cond_init(cond_hdl_t *_hdl)
 		ret = convert_std_errno(ret);
 		goto ERR_2;
 	}
+
+	hdl->number_of_condition_outstanding = 0;
+	hdl->number_of_condition_waiting_threads = 0;
+
 	*_hdl = hdl;
     msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s() :  successfully\n",__func__);
 	return EOK;
@@ -1592,6 +1598,11 @@ int lib_thread__cond_destroy(cond_hdl_t *_hdl)
 		goto ERR_0;
 	}
 
+	if ((*_hdl)->number_of_condition_waiting_threads> 0) {
+		ret = -ESTD_BUSY;
+		goto ERR_0;
+	}
+
 	/* destroy */
 	ret = pthread_cond_destroy(&(*_hdl)->cond);
 	if (ret != 0){
@@ -1644,12 +1655,18 @@ int lib_thread__cond_signal(cond_hdl_t _hdl)
 		ret = -EPAR_NULL;
 		goto ERR_0;
 	}
+//TODO CRITIACL SECTION FIX ME
+	/*check if any thread is waiting for a signal */
+	if (_hdl->number_of_condition_outstanding > 0) {
+		_hdl->number_of_condition_outstanding--;
 
-	/* signal */
-	ret = pthread_cond_signal(&_hdl->cond);
-	if (ret != 0){
-		ret = convert_std_errno(ret);
-		goto ERR_0;
+		/* signal */
+		ret = pthread_cond_signal(&_hdl->cond);
+		if (ret != 0){
+			_hdl->number_of_condition_outstanding++;
+			ret = convert_std_errno(ret);
+			goto ERR_0;
+		}
 	}
 	return EOK;
 
@@ -1681,17 +1698,23 @@ int lib_thread__cond_signal(cond_hdl_t _hdl)
 int lib_thread__cond_broadcast(cond_hdl_t _hdl)
 {
 	int ret;
-
+	unsigned int outstanding_backup;
 	/* check argument */
 	if (_hdl == NULL){
 		ret = -EPAR_NULL;
 		goto ERR_0;
 	}
 
-	ret = pthread_cond_broadcast(&(_hdl)->cond);
-	if (ret != 0){
-		ret = convert_std_errno(ret);
-		goto ERR_0;
+	if (_hdl->number_of_condition_outstanding > 0) {
+		outstanding_backup = _hdl->number_of_condition_outstanding;
+		_hdl->number_of_condition_outstanding = 0;
+
+		ret = pthread_cond_broadcast(&(_hdl)->cond);
+		if (ret != 0){
+			_hdl->number_of_condition_outstanding = outstanding_backup;
+			ret = convert_std_errno(ret);
+			goto ERR_0;
+		}
 	}
 
 	return EOK;
@@ -1739,12 +1762,26 @@ int lib_thread__cond_wait(cond_hdl_t _hdl, mutex_hdl_t _mtx)
 	}
 
 	/* wait */
-	ret = pthread_cond_wait(&(_hdl)->cond, &(_mtx)->mtx_hdl);
-	if (ret != 0){
-		ret = convert_std_errno(ret);
-		goto ERR_0;
+	_hdl->number_of_condition_outstanding++;
+	_hdl->number_of_condition_waiting_threads++;
+
+	 /* A check if the thread unblocking was no spurious wakeup*/
+	while (1) {
+		ret = pthread_cond_wait(&(_hdl)->cond, &(_mtx)->mtx_hdl);
+			if (ret != 0) {
+				ret = convert_std_errno(ret);
+				_hdl->number_of_condition_outstanding--;
+				_hdl->number_of_condition_waiting_threads--;
+				goto ERR_0;
+		}
+
+		/* ensure that no spurious wakeup occurred (which are very well possible according to the standard) */
+		if (_hdl->number_of_condition_waiting_threads != _hdl->number_of_condition_outstanding) {
+			break;
+		}
 	}
 
+	_hdl->number_of_condition_waiting_threads--;
 	return EOK;
 
 	ERR_0:
@@ -1803,13 +1840,25 @@ int lib_thread__cond_timedwait(cond_hdl_t _hdl, mutex_hdl_t _mtx, int _tmoms)
 		goto ERR_0;
 	}
 
-	/* timedwait */
-	ret = pthread_cond_timedwait(&(_hdl)->cond, &(_mtx)->mtx_hdl, &cur_time);
-	if (ret != 0){
-		ret = convert_std_errno(ret);
-		goto ERR_0;
+	 /* A check if the thread unblocking was no spurious wakeup*/
+	_hdl->number_of_condition_waiting_threads++;
+	_hdl->number_of_condition_outstanding++;
+	while (1) {
+		ret = pthread_cond_timedwait(&(_hdl)->cond, &(_mtx)->mtx_hdl, &cur_time);
+		if (ret != 0){
+			ret = convert_std_errno(ret);
+			_hdl->number_of_condition_outstanding--;
+			_hdl->number_of_condition_waiting_threads--;
+			goto ERR_0;
+		}
+
+		/* ensure that no spurious wakeup occurred (which are very well possible according to the standard) */
+		if (_hdl->number_of_condition_waiting_threads != _hdl->number_of_condition_outstanding) {
+			break;
+		}
 	}
 
+	_hdl->number_of_condition_waiting_threads--;
 	return EOK;
 
 	ERR_0:
@@ -1837,7 +1886,7 @@ void lib_thread__signal_pthread_cancel_handler(void *_hdl)
 {
 	signal_hdl_t sgn_hdl = (signal_hdl_t)_hdl;
 
-	sgn_hdl->number_of_waiting_threads--;
+	sgn_hdl->number_of_signal_waiting_threads--;
 
 	pthread_mutex_unlock(&sgn_hdl->mtx_hdl);
 
