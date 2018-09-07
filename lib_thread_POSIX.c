@@ -279,7 +279,7 @@ int lib_thread__create (thread_hdl_t *_hdl, thread_worker_t *_worker, void *_arg
 	if (_thread_name != NULL) {
 		pthread_setname_np(hdl->thread_hdl,_thread_name);
 		len = strlen(_thread_name) +1;
-		hdl->thread_name = calloc(len,sizeof(char));
+		hdl->thread_name = (char*)calloc(len,sizeof(char));
 		if (hdl->thread_name != NULL) {
 			memcpy(hdl->thread_name,_thread_name,len);
 			hdl->thread_name_len = len;
@@ -531,7 +531,7 @@ int lib_thread__mutex_init (mutex_hdl_t *_hdl)
 		goto ERR_1;
 	}
 
-	hdl = malloc (sizeof(struct mutex_hdl_attr));
+	hdl = (mutex_hdl_t)malloc (sizeof(struct mutex_hdl_attr));
 	if (hdl == NULL) {
 		ret = -EPAR_NULL;
 		goto ERR_1;
@@ -787,7 +787,7 @@ int lib_thread__signal_init (signal_hdl_t *_hdl)
 		goto ERR_2;
 	}
 
-	hdl = malloc (sizeof (struct signal_hdl_attr));
+	hdl = (signal_hdl_t)malloc (sizeof (struct signal_hdl_attr));
 	if(hdl == NULL) {
 		ret = -ESTD_NOMEM;
 		goto ERR_1;
@@ -1183,7 +1183,7 @@ int lib_thread__signal_timedwait (signal_hdl_t _hdl, unsigned int _milliseconds)
 		_hdl->number_of_signal_outstanding++;
 		pthread_cleanup_push(&lib_thread__signal_pthread_cancel_handler, _hdl);
 
-		signal_id = &_hdl->cond_hdl;
+		signal_id = (int)&_hdl->cond_hdl;
 
 		/* A check if the thread unblocking was no spurious wakeup*/
 		while (1)
@@ -1265,7 +1265,7 @@ int lib_thread__sem_init (sem_hdl_t *_hdl, int _count)
 		goto ERR_0;
 	}
 
-	hdl = malloc(sizeof (struct sem_hdl_attr));
+	hdl = (sem_hdl_t)malloc(sizeof (struct sem_hdl_attr));
 	if (hdl == NULL) {
 		ret = -ESTD_NOMEM;
 		goto ERR_0;
@@ -1527,7 +1527,7 @@ int lib_thread__cond_init(cond_hdl_t *_hdl)
 	}
 
 	/* create handle on heap */
-	hdl = malloc(sizeof(struct condvar_hdl_attr));
+	hdl = (cond_hdl_t)malloc(sizeof(struct condvar_hdl_attr));
 	if (hdl == NULL){
 		ret = convert_std_errno(errno);
 		goto ERR_1;

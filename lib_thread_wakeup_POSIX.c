@@ -23,7 +23,7 @@
 /* c-runtime */
 
 /* system */
-
+#include <stdlib.h>
 
 /* frame */
 #include <lib_convention__errno.h>
