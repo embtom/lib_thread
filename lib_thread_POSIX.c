@@ -150,7 +150,7 @@ int lib_thread__init(enum process_sched _sched, int _pcur)
 	}
 
 	ret = sched_getscheduler(pid);
-	if(ret != EOK) {
+	if(ret == EOK) {
 		ret = convert_std_errno(errno);
 		goto ERR_0;
 	}
