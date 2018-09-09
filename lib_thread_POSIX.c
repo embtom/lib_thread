@@ -112,6 +112,7 @@ int lib_thread__init(enum process_sched _sched, int _pcur)
 	int sched;
 	pid_t	pid;
 	struct sched_param	param;
+	enum process_sched old_sched;
 
 	/* Get ID of actual process */
 	pid = getpid();
@@ -122,8 +123,7 @@ int lib_thread__init(enum process_sched _sched, int _pcur)
 		goto ERR_0;
 	}
 
-	enum process_sched old_sched = (enum process_sched)ret;
-
+	old_sched = (enum process_sched)ret;
 
 	if ((_sched == PROCESS_SCHED_fifo) || (_sched == PROCESS_SCHED_rr))
 	{	param.__sched_priority = _pcur;	}
@@ -169,7 +169,6 @@ int lib_thread__init(enum process_sched _sched, int _pcur)
 
 	return ret;
 }
-
 
 /* *******************************************************************
  * \brief	Creation of thread worker
@@ -257,7 +256,7 @@ int lib_thread__create (thread_hdl_t *_hdl, thread_worker_t *_worker, void *_arg
 		goto ERR_1;
 	}
 
-	hdl = calloc(1,sizeof (struct thread_hdl_attr));
+	hdl = (thread_hdl_t)calloc(1,sizeof (struct thread_hdl_attr));
 	if(hdl == NULL) {
 		ret = -ESTD_NOMEM;
 		goto ERR_1;
