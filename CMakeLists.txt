@@ -1,7 +1,7 @@
 project(lib_thread)
 
 #However, the file(GLOB...) allows for wildcard additions:
-file(GLOB SOURCES "*.c")
+SET(SOURCES lib_thread__FREERTOS.c lib_thread_wakeup_FREERTOS.c)
 
 if(${MCU} STREQUAL "cortex-m3")
     add_definitions(-DCORTEX_M3) 
@@ -11,7 +11,6 @@ if(${MCU} STREQUAL "cortex-m4")
     add_definitions(-DCORTEX_M4) 
 ENDIF()
 
-include_directories(${lib_log_SOURCE_DIR})
 
 #Generate the static library from the sources
 add_library(${PROJECT_NAME} STATIC ${SOURCES})
