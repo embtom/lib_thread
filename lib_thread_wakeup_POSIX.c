@@ -119,7 +119,7 @@ int lib_thread__wakeup_create(wakeup_hdl_t * _wu_obj, unsigned _interval)
 	}
 
 	/* create thread handle on heap */
-	wu_obj = malloc(sizeof(**_wu_obj));
+	wu_obj = (wakeup_hdl_t)malloc(sizeof(**_wu_obj));
 	if (wu_obj == NULL){
 		line = __LINE__;
 		ret = convert_std_errno(errno);
