@@ -21,9 +21,11 @@
  * ******************************************************************/
 
 /* c-runtime */
+#include <stdlib.h>
 
 /* system */
-#include <stdlib.h>
+#include <FreeRTOS.h>
+#include <task.h>
 
 /* frame */
 #include <lib_convention__mem.h>
@@ -43,14 +45,16 @@
 /* wakeup handle object structure */
 struct internal_wakeup {
 	mutex_hdl_t timer_lock;
-	unsigned int timer_interval;
-	unsigned int timer_to_start;
+	TaskHandle_t wakeupTask;
+	TickType_t last_wait_time;
+	TickType_t interval_time;
+	unsigned int destroy;
 };
 
 /* *******************************************************************
  * (static) variables declarations
  * ******************************************************************/
-
+static unsigned int s_number_open_wakeup_obj = 0;
 
 /* *******************************************************************
  * Global Functions
@@ -69,6 +73,7 @@ struct internal_wakeup {
  * ****************************************************************************/
 int lib_thread__wakeup_init(void)
 {
+	s_number_open_wakeup_obj = 0;
 	return EOK;
 }
 
@@ -81,6 +86,9 @@ int lib_thread__wakeup_init(void)
  * ****************************************************************************/
 int lib_thread__wakeup_cleanup(void)
 {
+	if (s_number_open_wakeup_obj) {
+		return -ESTD_BUSY;
+	}
 	return EOK;
 }
 
@@ -121,31 +129,17 @@ int lib_thread__wakeup_create(wakeup_hdl_t * _wu_obj, unsigned _interval)
 	wu_obj = (wakeup_hdl_t)alloc_memory(1, sizeof(**_wu_obj));
 	if (wu_obj == NULL){
 		line = __LINE__;
-		ret = convert_std_errno(errno);
+		ret = -EPAR_NULL;
 		goto ERR_0;
 	}
 
-	ret = lib_thread__mutex_init(&wu_obj->timer_lock);
-	if (ret < EOK) {
-		line = __LINE__;
-		goto ERR_1;
-	}
-
-
-	lib_thread__mutex_lock(wu_obj->timer_lock);
-	//ret = lib_timer__start(wu_obj->timer,_interval);
-	wu_obj->timer_interval = _interval;
-	wu_obj->timer_to_start = 1;
-	lib_thread__mutex_unlock(wu_obj->timer_lock);
-
+	wu_obj->interval_time = pdMS_TO_TICKS(_interval);
+	s_number_open_wakeup_obj++;
 	*_wu_obj = wu_obj;
 	return EOK;
 
-	ERR_2:
-	lib_thread__mutex_destroy(&wu_obj->timer_lock);
-
 	ERR_1:
-	free(wu_obj);
+	free_memory(wu_obj);
 
     ERR_0:
     msg (LOG_LEVEL_error, M_DEV_LIB_THREAD_WHP_MODULE_ID, "%s(): failed with retval %i\n",__func__, ret );
@@ -179,20 +173,11 @@ int lib_thread__wakeup_destroy(wakeup_hdl_t *_wu_obj)
 		goto ERR_0;
 	}
 
-	ret = lib_thread__mutex_lock((*_wu_obj)->timer_lock);
-	if (ret < EOK) {
-		line = __LINE__;
-		goto ERR_0;
-	}
+	(*_wu_obj)->destroy = 1;
+	xTaskAbortDelay((*_wu_obj)->wakeupTask);
+	free_memory(*_wu_obj);
+	s_number_open_wakeup_obj--;
 
-
-	lib_thread__mutex_unlock((*_wu_obj)->timer_lock);
-
-	ret = lib_thread__mutex_destroy(&(*_wu_obj)->timer_lock);
-	if (ret < EOK) {
-		line = __LINE__;
-		goto ERR_0;
-	}
 
 	*_wu_obj = NULL;
 	return EOK;
@@ -221,20 +206,7 @@ int lib_thread__wakeup_setinterval(wakeup_hdl_t _wu_obj, unsigned _interval)
 		goto ERR_0;
 	}
 
-	ret = lib_thread__mutex_lock(_wu_obj->timer_lock);
-	if (ret < EOK) {
-		line = __LINE__;
-		goto ERR_0;
-	}
-
-	_wu_obj->timer_interval = _interval;
-
-	ret = lib_thread__mutex_unlock(_wu_obj->timer_lock);
-	if (ret < EOK) {
-		line = __LINE__;
-		goto ERR_0;
-	}
-
+	_wu_obj->interval_time = pdMS_TO_TICKS(_interval);
 	return EOK;
 
     ERR_0:
@@ -271,16 +243,17 @@ int lib_thread__wakeup_wait(wakeup_hdl_t _wu_obj)
 		goto ERR_0;
 	}
 
-	if ((_wu_obj->timer_to_start) && (_wu_obj->timer_interval != 0)) {
+	if (_wu_obj->last_wait_time == 0) {
+		_wu_obj->wakeupTask = xTaskGetCurrentTaskHandle();
+		_wu_obj->last_wait_time = xTaskGetTickCount();
+		return EOK;
+	}
+	else {
+		vTaskDelayUntil(&_wu_obj->last_wait_time,_wu_obj->interval_time);
+	}
 
-		ret = lib_thread__mutex_lock(_wu_obj->timer_lock);
-		if (ret < EOK) {
-			line = __LINE__;
-			goto ERR_0;
-		}
-
-		_wu_obj->timer_to_start = 0;
-		lib_thread__mutex_unlock(_wu_obj->timer_lock);
+	if (_wu_obj->destroy) {
+		return -ESTD_INTR;
 	}
 
 	return EOK;
