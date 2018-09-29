@@ -246,11 +246,8 @@ int lib_thread__wakeup_wait(wakeup_hdl_t _wu_obj)
 	if (_wu_obj->last_wait_time == 0) {
 		_wu_obj->wakeupTask = xTaskGetCurrentTaskHandle();
 		_wu_obj->last_wait_time = xTaskGetTickCount();
-		return EOK;
 	}
-	else {
-		vTaskDelayUntil(&_wu_obj->last_wait_time,_wu_obj->interval_time);
-	}
+	vTaskDelayUntil(&_wu_obj->last_wait_time,_wu_obj->interval_time);
 
 	if (_wu_obj->destroy) {
 		return -ESTD_INTR;
