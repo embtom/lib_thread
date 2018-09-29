@@ -1400,12 +1400,12 @@ int lib_thread__cond_signal(cond_hdl_t _hdl)
 		goto ERR_0;
 	}
 
+	/* MUTEX LOCK */
 	xSemaphoreTake(_hdl->mtx_waiting_threads_hdl, portMAX_DELAY );
-	msg(LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "%s() CNT %i\n", __func__, _hdl->number_of_waiting_threads);
 	if(_hdl->number_of_waiting_threads > 0) {
 		xSemaphoreGive(_hdl->cond_sem_hdl);
-		_hdl->number_of_waiting_threads--;
 	}
+	/* MUTEX UNLOCK */
 	xSemaphoreGive(_hdl->mtx_waiting_threads_hdl);
 
 	return EOK;
