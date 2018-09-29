@@ -109,7 +109,7 @@ struct sem_hdl_attr {
 struct condvar_hdl_attr {
 	SemaphoreHandle_t cond_sem_hdl;
 	SemaphoreHandle_t mtx_waiting_threads_hdl;
-	unsigned int number_of_waiting_threads;
+	int number_of_waiting_threads;
 };
 
 
@@ -1285,7 +1285,7 @@ int lib_thread__cond_init(cond_hdl_t *_hdl)
 		goto ERR_0;
 	}
 
-	cond_hdl = pvPortMalloc(sizeof(struct condvar_hdl_attr));
+	cond_hdl = (struct condvar_hdl_attr*)pvPortMalloc(sizeof(struct condvar_hdl_attr));
 	if (cond_hdl == NULL) {
 		ret = -ESTD_NOMEM;
 		goto ERR_0;
@@ -1302,6 +1302,7 @@ int lib_thread__cond_init(cond_hdl_t *_hdl)
 		ret = -ESTD_NOMEM;
 		goto ERR_2;
 	}
+	cond_hdl->number_of_waiting_threads = 0;
 
 	*_hdl = cond_hdl;
 	msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "cond_init(): successul (ID:'%u')", 0);
@@ -1400,6 +1401,7 @@ int lib_thread__cond_signal(cond_hdl_t _hdl)
 	}
 
 	xSemaphoreTake(_hdl->mtx_waiting_threads_hdl, portMAX_DELAY );
+	msg(LOG_LEVEL_error, M_LIB_THREAD__MODULE_ID, "%s() CNT %i\n", __func__, _hdl->number_of_waiting_threads);
 	if(_hdl->number_of_waiting_threads > 0) {
 		xSemaphoreGive(_hdl->cond_sem_hdl);
 		_hdl->number_of_waiting_threads--;
