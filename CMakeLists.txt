@@ -1,7 +1,6 @@
 project (lib_thread)
 
 cmake_minimum_required(VERSION 2.6)
-
 add_subdirectory(src)
 
 ######################################################################################
@@ -27,6 +26,7 @@ GET_PROPERTY(LIB_THREAD_PRIVATE_DEFINITION  GLOBAL PROPERTY LIB_THREAD_ARCH_PRIV
 GET_PROPERTY(LIB_THREAD_DEPEND              GLOBAL PROPERTY LIB_THREAD_ARCH_DEPEND)
 
 SET(LIB_THREAD_DEPEND ${LIB_THREAD_DEPEND} itf_lib_convention lib_log)
+SET(LIB_THREAD_PRIVATE_DEFINITION ${LIB_THREAD_PRIVATE_DEFINITION} TRACE )
 
 #message(STATUS "##### ${LIB_THREAD_SOURCE_C}")
 #message(STATUS "##### ${LIB_THREAD_PRIVATE_DEFINITION}")
@@ -36,3 +36,4 @@ SET(LIB_THREAD_DEPEND ${LIB_THREAD_DEPEND} itf_lib_convention lib_log)
 add_library(${PROJECT_NAME} STATIC ${LIB_THREAD_SOURCE_C})
 target_link_libraries(${PROJECT_NAME} ${LIB_THREAD_DEPEND})
 target_include_directories(${PROJECT_NAME} PUBLIC ./include)
+target_compile_definitions(${PROJECT_NAME} PRIVATE ${LIB_THREAD_PRIVATE_DEFINITION})
