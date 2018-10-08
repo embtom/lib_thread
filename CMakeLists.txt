@@ -6,7 +6,7 @@ add_subdirectory(src)
 ######################################################################################
 # Selector to choose architecture to build lib_thread
 ######################################################################################
-set(LIB_THREAD_ARCHITECTURE "None" CACHE STRING "Architecture to build lib_thread on")
+set(LIB_THREAD_ARCHITECTURE ${LIB_THREAD_ARCHITECTURE} CACHE STRING "Architecture to build lib_thread on")
 get_property(architectures GLOBAL PROPERTY LIB_THREAD_ARCHITECTURES)
 list(SORT architectures)
 set_property(CACHE LIB_THREAD_ARCHITECTURE PROPERTY STRINGS None ${architectures})

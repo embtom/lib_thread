@@ -28,6 +28,7 @@
 /* frame */
 #include <lib_convention__errno.h>
 #include <lib_log.h>
+#include <lib_timer_init_POSIX.h>
 #include <lib_timer.h>
 
 /* project*/
