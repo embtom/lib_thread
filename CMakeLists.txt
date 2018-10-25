@@ -28,6 +28,12 @@ GET_PROPERTY(LIB_THREAD_DEPEND              GLOBAL PROPERTY LIB_THREAD_ARCH_DEPE
 SET(LIB_THREAD_DEPEND ${LIB_THREAD_DEPEND} itf_lib_convention lib_log)
 SET(LIB_THREAD_PRIVATE_DEFINITION ${LIB_THREAD_PRIVATE_DEFINITION} TRACE )
 
+message(STATUS "LIB_THREAD : selected architecture ${LIB_THREAD_ARCHITECTURE}")
+
+######################################################
+#Build target settings
+######################################################
+
 #message(STATUS "##### ${LIB_THREAD_SOURCE_C}")
 #message(STATUS "##### ${LIB_THREAD_PRIVATE_DEFINITION}")
 #message(STATUS "##### ${LIB_THREAD_DEPEND} ")
