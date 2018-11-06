@@ -1141,7 +1141,7 @@ int lib_thread__sem_timedwait (sem_hdl_t _hdl, int _milliseconds)
 		goto ERR_0;
 	}
 
-    msg (LOG_LEVEL_debug_prio_1, M_LIB_THREAD__MODULE_ID, "%s():  successfully",__func__);
+    msg (LOG_LEVEL_debug, M_LIB_THREAD__MODULE_ID, "%s():  successfully",__func__);
 
 	return EOK;
 
@@ -1173,7 +1173,7 @@ int lib_thread__sem_post (sem_hdl_t _hdl)
 		goto ERR_0;
 	}
 
-    msg (LOG_LEVEL_debug_prio_1, M_LIB_THREAD__MODULE_ID, "%s():  successfully",__func__);
+    msg (LOG_LEVEL_debug, M_LIB_THREAD__MODULE_ID, "%s():  successfully",__func__);
 	return EOK;
 
 	ERR_0:
@@ -1213,7 +1213,7 @@ int lib_thread__sem_wait (sem_hdl_t _hdl)
 		goto ERR_0;
 	}
 
-    msg (LOG_LEVEL_debug_prio_1, M_LIB_THREAD__MODULE_ID, "%s():  successfully",__func__);
+    msg (LOG_LEVEL_debug, M_LIB_THREAD__MODULE_ID, "%s():  successfully",__func__);
 
 	return EOK;
 
@@ -1254,7 +1254,7 @@ int lib_thread__sem_trywait (sem_hdl_t _hdl)
 		goto ERR_0;
 	}
 
-	msg (LOG_LEVEL_debug_prio_1, M_LIB_THREAD__MODULE_ID, "%s(): successfully",__func__);
+	msg (LOG_LEVEL_debug, M_LIB_THREAD__MODULE_ID, "%s(): successfully",__func__);
 	return EOK;
 
 	ERR_0:
