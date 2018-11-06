@@ -156,16 +156,16 @@ int lib_thread__init(enum process_sched _sched, int _pcur)
 	}
 
 	if(ret != (int)_sched) {
-		msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s(): failed policy set (Policy from %s to %s with prio %u)\n",__func__, lib_thread__strsched(old_sched), lib_thread__strsched(_sched), _pcur);
+		msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s(): failed policy set (Policy from %s to %s with prio %u) ",__func__, lib_thread__strsched(old_sched), lib_thread__strsched(_sched), _pcur);
 		return -EACCES;
 	}
 	else {
-		msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s(): successfully (Policy from %s to %s with prio %u)\n",__func__, lib_thread__strsched(old_sched), lib_thread__strsched(_sched), _pcur);
+		msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s(): successfully (Policy from %s to %s with prio %u) ",__func__, lib_thread__strsched(old_sched), lib_thread__strsched(_sched), _pcur);
 		return 0;
 	}
 
 	ERR_0:
-	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i\n",__func__, ret );
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i ",__func__, ret );
 
 	return ret;
 }
@@ -291,9 +291,9 @@ int lib_thread__create (thread_hdl_t *_hdl, thread_worker_t *_worker, void *_arg
 
 
 	if (_thread_name == NULL)
-		msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s(): successfully (Thread ID '%u' Name '<NO NAME>' prio: '%u')\n",__func__, hdl->thread_hdl, thread_prio);
+		msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s(): successfully (Thread ID '%u' Name '<NO NAME>' prio: '%u') ",__func__, hdl->thread_hdl, thread_prio);
 	else
-		msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s(): successfully (Thread ID '%u' Name '%s' prio: '%u')\n",__func__, hdl->thread_hdl, _thread_name, thread_prio);
+		msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s(): successfully (Thread ID '%u' Name '%s' prio: '%u') ",__func__, hdl->thread_hdl, _thread_name, thread_prio);
 
 	*_hdl = hdl;
 	return EOK;
@@ -310,7 +310,7 @@ int lib_thread__create (thread_hdl_t *_hdl, thread_worker_t *_worker, void *_arg
 
 	ERR_0:
 
-	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i\n",__func__, ret );
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i ",__func__, ret );
 
 	if (_hdl != NULL) {
 		*_hdl = NULL;
@@ -362,14 +362,14 @@ int lib_thread__join(thread_hdl_t *_hdl, void **_ret_val)
 
 	free(*_hdl);
 	(*_hdl) = NULL;
-	//LOG_LEVEL_debug_prio_1
-	msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s(): successfully (Thread ID '%u' Name '%s') \n",__func__, threadid ,buffer);
+	//LOG_LEVEL_debug
+	msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s(): successfully (Thread ID '%u' Name '%s')  ",__func__, threadid ,buffer);
 
 	return EOK;
 
 
 	ERR_0:
-	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i\n",__func__, ret );
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i ",__func__, ret );
 
 	return ret;
 }
@@ -401,11 +401,11 @@ int lib_thread__cancel(thread_hdl_t _hdl)
 		ret = convert_std_errno(ret);
 		goto ERR_0;
 	}
-	msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s():  successfully (Thread ID '%u')\n",__func__, _hdl->thread_hdl);
+	msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s():  successfully (Thread ID '%u') ",__func__, _hdl->thread_hdl);
 	return EOK;
 
 	ERR_0:
-	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i\n",__func__, ret );
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i ",__func__, ret );
 	return ret;
 }
 
@@ -447,7 +447,7 @@ int lib_thread__getname(thread_hdl_t _hdl, char * _name, int _maxlen)
 	return ret;
 
 	ERR_0:
-	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i\n",__func__, ret );
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i ",__func__, ret );
 	return ret;
 }
 
@@ -472,11 +472,11 @@ int lib_thread__msleep (unsigned int _milliseconds)
 	ret = nanosleep(&sleep_interval, NULL);
 	if (ret < EOK) {
 		ret = convert_std_errno(errno);
-		msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i\n", __func__, ret);
+		msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i ", __func__, ret);
 		return ret;
 	}
 
-	msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s(): successfully\n",__func__ );
+	msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s(): successfully ",__func__ );
 	return EOK;
 }
 
@@ -549,7 +549,7 @@ int lib_thread__mutex_init (mutex_hdl_t *_hdl)
 	}
 
 	*_hdl = hdl;
-    msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s():  successfully\n",__func__);
+    msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s():  successfully ",__func__);
 
 	return EOK;
 
@@ -560,7 +560,7 @@ int lib_thread__mutex_init (mutex_hdl_t *_hdl)
 	pthread_mutexattr_destroy(&mutex_attr);
 
 	ERR_0:
-	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i\n",__func__, ret );
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i ",__func__, ret );
 	return ret;
 }
 
@@ -610,11 +610,11 @@ int lib_thread__mutex_destroy (mutex_hdl_t *_hdl)
 
 	free(*_hdl);
 	*_hdl = NULL;
-    msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s():  successfully\n",__func__);
+    msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s():  successfully ",__func__);
 	return EOK;
 
 	ERR_0:
-	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i\n",__func__, ret );
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i ",__func__, ret );
 
 	return ret;
 }
@@ -646,11 +646,11 @@ int lib_thread__mutex_lock (mutex_hdl_t _hdl)
 		goto ERR_0;
 	}
 
-	msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s():  successfully (Mutex ID '%u')\n",__func__, &_hdl->mtx_hdl);
+	msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s():  successfully (Mutex ID '%u') ",__func__, &_hdl->mtx_hdl);
 	return EOK;
 
 	ERR_0:
-	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i\n",__func__, ret );
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i ",__func__, ret );
 
 	return ret;
 }
@@ -681,11 +681,11 @@ int lib_thread__mutex_unlock (mutex_hdl_t _hdl)
 		goto ERR_0;
 	}
 
-	msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s():  successfully (Mutex ID '%u')\n",__func__, &_hdl->mtx_hdl);
+	msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s():  successfully (Mutex ID '%u') ",__func__, &_hdl->mtx_hdl);
 	return EOK;
 
 	ERR_0:
-	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i\n",__func__, ret );
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i ",__func__, ret );
 
 	return ret;
 }
@@ -723,15 +723,15 @@ int lib_thread__mutex_trylock (mutex_hdl_t _hdl)
 		}
 	}
 
-	msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s(): successfully (Mutex ID '%u')\n", __func__, &_hdl->mtx_hdl);
+	msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s(): successfully (Mutex ID '%u') ", __func__, &_hdl->mtx_hdl);
 	return EOK;
 
 	ERR_0:
 
 	if (ret == -ESTD_BUSY)
-		msg (LOG_LEVEL_warning, LIB_THREAD_MODULE_ID, "%s(): Mutex already locked (Mutex ID '%u')\n",__func__, &_hdl->mtx_hdl);
+		msg (LOG_LEVEL_warning, LIB_THREAD_MODULE_ID, "%s(): Mutex already locked (Mutex ID '%u') ",__func__, &_hdl->mtx_hdl);
 	else
-		msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i\n",__func__,ret );
+		msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i ",__func__,ret );
 	return ret;
 }
 
@@ -821,7 +821,7 @@ int lib_thread__signal_init (signal_hdl_t *_hdl)
 	hdl->destroy_active = 0;
 
 	*_hdl = hdl;
-	msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s():  successfully (Signal ID '%u')\n",__func__, &hdl->cond_hdl);
+	msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s():  successfully (Signal ID '%u') ",__func__, &hdl->cond_hdl);
 	return EOK;
 
 	ERR_5:
@@ -843,7 +843,7 @@ int lib_thread__signal_init (signal_hdl_t *_hdl)
 	if(_hdl != NULL) {
 		*_hdl = NULL;
 	}
-	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i\n",__func__, ret);
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i ",__func__, ret);
 
 	return ret;
 
@@ -951,14 +951,14 @@ int lib_thread__signal_destroy (signal_hdl_t *_hdl)
 
 	free(*_hdl);
 	*_hdl = NULL;
-    msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s(): successfully\n",__func__);
+    msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s(): successfully ",__func__);
 	return EOK;
 
 	ERR_1:
 	pthread_mutex_unlock(&(*_hdl)->mtx_hdl);
 
 	ERR_0:
-	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i\n",__func__, ret );
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i ",__func__, ret );
 
 	return ret;
 }
@@ -1030,14 +1030,14 @@ int lib_thread__signal_send (signal_hdl_t _hdl)
 	/* Check if somebody is waiting for signal */
 
 
-    msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s():  successfully \n",__func__);
+    msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s():  successfully  ",__func__);
 	return EOK;
 
 	ERR_1:
 	pthread_mutex_unlock(&_hdl->mtx_hdl);
 
 	ERR_0:
-	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i\n",__func__, ret );
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i ",__func__, ret );
 
 	return ret;
 
@@ -1116,10 +1116,10 @@ int lib_thread__signal_wait (signal_hdl_t _hdl)
 
 	switch (ret) {
 		case EOK :
-            msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s(): unblocked successfully \n",__func__);
+            msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s(): unblocked successfully  ",__func__);
 			break;
 		case -ESTD_PERM :
-            msg (LOG_LEVEL_debug_prio_2, LIB_THREAD_MODULE_ID, "%s(): unblocked destroyed \n",__func__);
+            msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s(): unblocked destroyed  ",__func__);
 			break;
 		default :
 			goto ERR_0;
@@ -1131,7 +1131,7 @@ int lib_thread__signal_wait (signal_hdl_t _hdl)
 	pthread_mutex_unlock(&_hdl->mtx_hdl);
 
 	ERR_0:
-	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i\n",__func__, ret );
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i ",__func__, ret );
 
 	return ret;
 
@@ -1218,13 +1218,13 @@ int lib_thread__signal_timedwait (signal_hdl_t _hdl, unsigned int _milliseconds)
 
 	switch (ret) {
 		case EOK :
-			msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s(): unblocked successfully (Signal ID '%u')\n",__func__, signal_id);
+			msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s(): unblocked successfully (Signal ID '%u') ",__func__, signal_id);
 			break;
 		case -ESTD_PERM :
-			msg (LOG_LEVEL_debug_prio_2, LIB_THREAD_MODULE_ID, "%s(): unblocked destroyed (Signal ID '%u')\n",__func__, signal_id);
+			msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s(): unblocked destroyed (Signal ID '%u') ",__func__, signal_id);
 			break;
 		case -EEXEC_TO :
-			msg (LOG_LEVEL_debug_prio_2, LIB_THREAD_MODULE_ID, "%s(): unblocked timeout (Signal ID '%u')\n",__func__, signal_id);
+			msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s(): unblocked timeout (Signal ID '%u') ",__func__, signal_id);
 			break;
 		default :
 			goto ERR_0;
@@ -1236,7 +1236,7 @@ int lib_thread__signal_timedwait (signal_hdl_t _hdl, unsigned int _milliseconds)
 	pthread_mutex_unlock(&_hdl->mtx_hdl);
 
 	ERR_0:
-	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i\n",__func__, ret );
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i ",__func__, ret );
 
 	return ret;
 }
@@ -1277,7 +1277,7 @@ int lib_thread__sem_init (sem_hdl_t *_hdl, int _count)
 	}
 
 	*_hdl = hdl;
-    msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "lib_thread__sem_init :  successfully\n");
+    msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "lib_thread__sem_init :  successfully ");
 	return EOK;
 
 	ERR_1:
@@ -1287,7 +1287,7 @@ int lib_thread__sem_init (sem_hdl_t *_hdl, int _count)
 	}
 
 	ERR_0:
-	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i\n",__func__, ret );
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i ",__func__, ret );
 	return ret;
 }
 
@@ -1324,14 +1324,14 @@ int lib_thread__sem_destroy (sem_hdl_t *_hdl)
 
 	free(*_hdl);
 	*_hdl = NULL;
-    msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s():  successfully\n",__func__);
+    msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s():  successfully ",__func__);
 
 
 	return EOK;
 
 
 	ERR_0:
-	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i\n",__func__, ret );
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i ",__func__, ret );
 	return ret;
 }
 
@@ -1362,12 +1362,12 @@ int lib_thread__sem_post (sem_hdl_t _hdl)
 		goto ERR_0;
 	}
 
-    msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s():  successfully\n",__func__);
+    msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s():  successfully ",__func__);
 
 	return EOK;
 
 	ERR_0:
-	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i\n",__func__, ret );
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i ",__func__, ret );
 	return ret;
 }
 
@@ -1398,12 +1398,12 @@ int lib_thread__sem_wait (sem_hdl_t _hdl)
 		goto ERR_0;
 	}
 
-    msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s():  successfully\n",__func__);
+    msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s():  successfully ",__func__);
 
 	return EOK;
 
 	ERR_0:
-	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s() : failed with retval %i\n", __func__, ret );
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s() : failed with retval %i ", __func__, ret );
 	return ret;
 }
 
@@ -1446,7 +1446,7 @@ int lib_thread__sem_timedwait (sem_hdl_t _hdl, int _milliseconds)
 	return EOK;
 
 	ERR_0:
-	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s() : failed with retval %i\n", __func__, ret );
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s() : failed with retval %i ", __func__, ret );
 	return ret;
 }
 
@@ -1477,12 +1477,12 @@ int lib_thread__sem_trywait (sem_hdl_t _hdl)
 		goto ERR_0;
 	}
 
-    msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s():  successfully\n",__func__);
+    msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s():  successfully ",__func__);
 
 	return EOK;
 
 	ERR_0:
-	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i\n",__func__, ret );
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i ",__func__, ret );
 	return ret;
 }
 
@@ -1543,7 +1543,7 @@ int lib_thread__cond_init(cond_hdl_t *_hdl)
 	hdl->number_of_condition_waiting_threads = 0;
 
 	*_hdl = hdl;
-    msg (LOG_LEVEL_debug_prio_1, LIB_THREAD_MODULE_ID, "%s() :  successfully\n",__func__);
+    msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s() :  successfully ",__func__);
 	return EOK;
 
 	ERR_2:
@@ -1558,7 +1558,7 @@ int lib_thread__cond_init(cond_hdl_t *_hdl)
 		_hdl = NULL;
 	}
 
-	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i\n",__func__, ret );
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i ",__func__, ret );
 	return ret;
 }
 
@@ -1620,7 +1620,7 @@ int lib_thread__cond_destroy(cond_hdl_t *_hdl)
 		_hdl = NULL;
 	}
 
-	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i\n",__func__, ret );
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i ",__func__, ret );
 	return ret;
 }
 
@@ -1671,7 +1671,7 @@ int lib_thread__cond_signal(cond_hdl_t _hdl)
 
 	ERR_0:
 
-	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s() : failed with retval %i\n",__func__, ret );
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s() : failed with retval %i ",__func__, ret );
 	return ret;
 }
 
@@ -1719,7 +1719,7 @@ int lib_thread__cond_broadcast(cond_hdl_t _hdl)
 	return EOK;
 
 	ERR_0:
-	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s() : failed with retval %i\n",__func__, ret );
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s() : failed with retval %i ",__func__, ret );
 	return ret;
 }
 
@@ -1784,7 +1784,7 @@ int lib_thread__cond_wait(cond_hdl_t _hdl, mutex_hdl_t _mtx)
 	return EOK;
 
 	ERR_0:
-	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s() : failed with retval %i\n",__func__, ret );
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s() : failed with retval %i ",__func__, ret );
 	return ret;
 }
 
@@ -1861,7 +1861,7 @@ int lib_thread__cond_timedwait(cond_hdl_t _hdl, mutex_hdl_t _mtx, int _tmoms)
 	return EOK;
 
 	ERR_0:
-	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s() : failed with retval %i\n",__func__, ret );
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s() : failed with retval %i ",__func__, ret );
 	return ret;
 }
 
