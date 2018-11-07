@@ -4,8 +4,13 @@ cmake_minimum_required(VERSION 2.6)
 add_subdirectory(src)
 
 ######################################################################################
-# Selector to choose architecture to build lib_thread
+# Build configurator
 ######################################################################################
+
+#Selector for logging base
+option(LIB_THREAD_EXTERNAL_IOTTY "Usage of the system iotty library for logging" OFF)
+
+#Selector to choose architecture to build lib_thread
 set(LIB_THREAD_ARCHITECTURE ${LIB_THREAD_ARCHITECTURE} CACHE STRING "Architecture to build lib_thread on")
 get_property(architectures GLOBAL PROPERTY LIB_THREAD_ARCHITECTURES)
 list(SORT architectures)
@@ -25,7 +30,12 @@ GET_PROPERTY(LIB_THREAD_SOURCE_C            GLOBAL PROPERTY LIB_THREAD_ARCH_SOUR
 GET_PROPERTY(LIB_THREAD_PRIVATE_DEFINITION  GLOBAL PROPERTY LIB_THREAD_ARCH_PRIVATE_DEFINITION)
 GET_PROPERTY(LIB_THREAD_DEPEND              GLOBAL PROPERTY LIB_THREAD_ARCH_DEPEND)
 
-SET(LIB_THREAD_DEPEND ${LIB_THREAD_DEPEND} itf_lib_convention lib_log)
+if (LIB_THREAD_EXTERNAL_IOTTY)
+    find_package(iotty REQUIRED)
+    SET(LIB_THREAD_DEPEND ${LIB_THREAD_DEPEND} itf_lib_convention  EMBTOM::iotty)
+else()
+    SET(LIB_THREAD_DEPEND ${LIB_THREAD_DEPEND} itf_lib_convention lib_log)
+endif()
 SET(LIB_THREAD_PRIVATE_DEFINITION ${LIB_THREAD_PRIVATE_DEFINITION} TRACE )
 
 message(STATUS "LIB_THREAD : selected architecture ${LIB_THREAD_ARCHITECTURE}")
