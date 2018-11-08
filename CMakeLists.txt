@@ -8,7 +8,7 @@ add_subdirectory(src)
 ######################################################################################
 
 #Selector for logging base
-option(LIB_THREAD_EXTERNAL_IOTTY "Usage of the system iotty library for logging" OFF)
+option(LIB_THREAD_EXTERNAL_IOTTY "Usage of the system iotty library for logging" ${LIB_THREAD_EXTERNAL_IOTTY})
 
 #Selector to choose architecture to build lib_thread
 set(LIB_THREAD_ARCHITECTURE ${LIB_THREAD_ARCHITECTURE} CACHE STRING "Architecture to build lib_thread on")
@@ -32,7 +32,7 @@ GET_PROPERTY(LIB_THREAD_DEPEND              GLOBAL PROPERTY LIB_THREAD_ARCH_DEPE
 
 if (LIB_THREAD_EXTERNAL_IOTTY)
     find_package(iotty REQUIRED)
-    SET(LIB_THREAD_DEPEND ${LIB_THREAD_DEPEND} itf_lib_convention  EMBTOM::iotty)
+    SET(LIB_THREAD_DEPEND ${LIB_THREAD_DEPEND} itf_lib_convention EMBTOM::iotty)
 else()
     SET(LIB_THREAD_DEPEND ${LIB_THREAD_DEPEND} itf_lib_convention lib_log)
 endif()
@@ -44,11 +44,6 @@ message(STATUS "LIB_THREAD : selected architecture ${LIB_THREAD_ARCHITECTURE}")
 #Build target settings
 ######################################################
 
-#message(STATUS "##### ${LIB_THREAD_SOURCE_C}")
-#message(STATUS "##### ${LIB_THREAD_PRIVATE_DEFINITION}")
-#message(STATUS "##### ${LIB_THREAD_DEPEND} ")
-
-#Generate the static library from the sources
 add_library(${PROJECT_NAME} STATIC ${LIB_THREAD_SOURCE_C})
 target_link_libraries(${PROJECT_NAME} ${LIB_THREAD_DEPEND})
 target_include_directories(${PROJECT_NAME} PUBLIC ./include)
