@@ -85,7 +85,7 @@ struct signal_wait_node {
 struct thread_hdl_attr {
 	TaskHandle_t rtos_thread_hdl;
 	struct thunk_task_attr *thunk_attr;
-	char *thread_name;
+	const char *thread_name;
 };
 
 /* structure which defines the opaque mutex handle*/
@@ -165,7 +165,7 @@ int lib_thread__init(enum process_sched _sched, int _pcur)
  * ---------
  * \return	'0', if successful, < '0' if not successful
  * ******************************************************************/
-int lib_thread__create (thread_hdl_t *_hdl, thread_worker_t *_worker, void *_arg, int _relative_priority, const char *_thread_name)
+int lib_thread__create (thread_hdl_t *_hdl, thread_worker_t *_worker, void *_arg, int _relative_priority, const char const *_thread_name)
 {
 	unsigned long prio;
 	int ret;
@@ -191,8 +191,8 @@ int lib_thread__create (thread_hdl_t *_hdl, thread_worker_t *_worker, void *_arg
 	}
 
 	/* allocate memory in order to store handles and further parameters */
-	hdl = pvPortMalloc(sizeof(struct thread_hdl_attr));
-	thunk_attr = pvPortMalloc(sizeof(struct thunk_task_attr));
+	hdl = (struct thread_hdl_attr*)pvPortMalloc(sizeof(struct thread_hdl_attr));
+	thunk_attr = (struct thunk_task_attr*)pvPortMalloc(sizeof(struct thunk_task_attr));
 	if((hdl == NULL) || (thunk_attr == NULL)){
 		ret = -ESTD_NOMEM;
 		goto ERR_1;
@@ -730,7 +730,7 @@ int lib_thread__signal_init (signal_hdl_t *_hdl)
 		goto ERR_0;
 	}
 
-	sgn_hdl = pvPortMalloc(sizeof(struct signal_hdl_attr));
+	sgn_hdl = (signal_hdl_t)(sizeof(struct signal_hdl_attr));
 	if (sgn_hdl == NULL) {
 		ret = -ESTD_NOMEM;
 		goto ERR_0;
@@ -901,7 +901,7 @@ int lib_thread__signal_wait (signal_hdl_t _hdl)
 //		return -ESTD_PERM;
 //	}
 
-	sgn_wait_node = pvPortMalloc(sizeof(struct signal_wait_node));
+	sgn_wait_node = (struct signal_wait_node *)pvPortMalloc(sizeof(struct signal_wait_node));
 	if (sgn_wait_node == NULL) {
 		ret = -ESTD_NOMEM;
 		goto ERR_0;
@@ -971,7 +971,7 @@ int lib_thread__signal_timedwait (signal_hdl_t _hdl, unsigned int _milliseconds)
 //		return -ESTD_PERM;
 //	}
 
-	sgn_wait_node = pvPortMalloc(sizeof(struct signal_wait_node));
+	sgn_wait_node = (struct signal_wait_node *)pvPortMalloc(sizeof(struct signal_wait_node));
 	if (sgn_wait_node == NULL) {
 		ret = -ESTD_NOMEM;
 		goto ERR_0;
@@ -1044,7 +1044,7 @@ int lib_thread__sem_init (sem_hdl_t *_hdl, int _count)
 		goto ERR_0;
 	}
 
-	sem_hdl = pvPortMalloc(sizeof(struct sem_hdl_attr));
+	sem_hdl = (sem_hdl_t)pvPortMalloc(sizeof(struct sem_hdl_attr));
 	if (sem_hdl == NULL) {
 		ret = -ESTD_NOMEM;
 		goto ERR_0;
@@ -1639,7 +1639,7 @@ static int lib_thread__mutex_mode_init (mutex_hdl_t *_hdl, enum mtx_mode _mode)
 		goto ERR_0;
 	}
 
-	mtx_hdl = pvPortMalloc(sizeof(struct mutex_hdl_attr));
+	mtx_hdl = (struct mutex_hdl_attr*)pvPortMalloc(sizeof(struct mutex_hdl_attr));
 	if (mtx_hdl == NULL) {
 		ret = -ESTD_NOMEM;
 		goto ERR_0;
@@ -1713,7 +1713,7 @@ static int signal_waiter__sort_insert(struct queue_attr *_queue, struct signal_w
 
 	/* Second entry*/
 	if (start == end) {
-		itr_data = GET_CONTAINER_OF(start,struct signal_wait_node,node);
+		itr_data = (struct signal_wait_node*)GET_CONTAINER_OF(start,struct signal_wait_node,node);
 		if (itr_data->rtos_thread_prio < _to_insert->rtos_thread_prio) {
 			ret = lib_list__add_before(_queue,&itr_data->node,&_to_insert->node,0,NULL);
 		}
@@ -1726,7 +1726,7 @@ static int signal_waiter__sort_insert(struct queue_attr *_queue, struct signal_w
 
 	for (itr_node = start; itr_node != end; ITR_NEXT(_queue, &itr_node, 0, NULL))
 	{
-		itr_data = GET_CONTAINER_OF(itr_node,struct signal_wait_node,node);
+		itr_data = (struct signal_wait_node*)GET_CONTAINER_OF(itr_node,struct signal_wait_node,node);
 		if (itr_data->rtos_thread_prio < _to_insert->rtos_thread_prio) {
 			ret = lib_list__add_before(_queue,&itr_data->node,&_to_insert->node,0,NULL);
 			return ret;
@@ -1734,7 +1734,7 @@ static int signal_waiter__sort_insert(struct queue_attr *_queue, struct signal_w
 	}
 
 	/*last entry*/
-	itr_data = GET_CONTAINER_OF(itr_node,struct signal_wait_node,node);
+	itr_data = (struct signal_wait_node*)GET_CONTAINER_OF(itr_node,struct signal_wait_node,node);
 	if (itr_data->rtos_thread_prio < _to_insert->rtos_thread_prio) {
 		ret = lib_list__add_before(_queue,&itr_data->node,&_to_insert->node,0,NULL);
 	}
@@ -1755,7 +1755,7 @@ static struct signal_wait_node* signal_waiter__get_top(struct queue_attr *_queue
 		return NULL;
 	}
 
-	itr_node_data = GET_CONTAINER_OF(itr_node,struct signal_wait_node,node);
+	itr_node_data = (struct signal_wait_node*)GET_CONTAINER_OF(itr_node,struct signal_wait_node,node);
 	return itr_node_data;
 }
 
