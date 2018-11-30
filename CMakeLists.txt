@@ -6,8 +6,7 @@ add_subdirectory(src)
 ######################################################################################
 # Build configurator
 ######################################################################################
-
-#Selector for logging base
+elector for logging base
 option(LIB_THREAD_EXTERNAL_IOTTY "Usage of the system iotty library for logging" ${LIB_THREAD_EXTERNAL_IOTTY})
 
 #Selector to choose architecture to build lib_thread
@@ -40,10 +39,9 @@ SET(LIB_THREAD_PRIVATE_DEFINITION ${LIB_THREAD_PRIVATE_DEFINITION} TRACE )
 
 message(STATUS "LIB_THREAD : selected architecture ${LIB_THREAD_ARCHITECTURE}")
 
-######################################################
+#######################################################################################
 #Build target settings
-######################################################
-
+#######################################################################################
 add_library(${PROJECT_NAME} STATIC ${LIB_THREAD_SOURCE_C})
 target_link_libraries(${PROJECT_NAME} ${LIB_THREAD_DEPEND})
 target_include_directories(${PROJECT_NAME} PUBLIC ./include)
