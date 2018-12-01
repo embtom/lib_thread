@@ -6,7 +6,6 @@ add_subdirectory(src)
 ######################################################################################
 # Build configurator
 ######################################################################################
-elector for logging base
 option(LIB_THREAD_EXTERNAL_IOTTY "Usage of the system iotty library for logging" ${LIB_THREAD_EXTERNAL_IOTTY})
 
 #Selector to choose architecture to build lib_thread
