@@ -165,14 +165,14 @@ int lib_thread__init(enum process_sched _sched, int _pcur)
  * ---------
  * \return	'0', if successful, < '0' if not successful
  * ******************************************************************/
-int lib_thread__create (thread_hdl_t *_hdl, thread_worker_t *_worker, void *_arg, int _relative_priority, const char const *_thread_name)
+int lib_thread__create (thread_hdl_t *_hdl, thread_worker_t *_worker, void *_arg, int _relative_priority, const char *_thread_name)
 {
 	unsigned long prio;
 	int ret;
 	struct thread_hdl_attr *hdl;
 	struct thunk_task_attr *thunk_attr;
-
-
+	const char *thread_name = "noName";	
+	
 	if ((_hdl == NULL) || (_worker == NULL)) {
 		ret = -EPAR_NULL;
 		goto ERR_0;
@@ -209,7 +209,11 @@ int lib_thread__create (thread_hdl_t *_hdl, thread_worker_t *_worker, void *_arg
 		hdl->thunk_attr = thunk_attr;
 	}
 
-	ret = (int)xTaskCreate(&thunk_lib_thread__taskprocessing, _thread_name, configMINIMAL_STACK_SIZE, (void*)thunk_attr, prio, &hdl->rtos_thread_hdl);
+	if(_thread_name != NULL) {
+		thread_name = _thread_name; 
+	}
+
+	ret = (int)xTaskCreate(&thunk_lib_thread__taskprocessing, thread_name, configMINIMAL_STACK_SIZE, (void*)thunk_attr, prio, &hdl->rtos_thread_hdl);
 	switch (ret) {
 		case pdPASS 								: ret = EOK; break;
 		case errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY	: ret = -ESTD_NOMEM; break;
@@ -368,23 +372,18 @@ int lib_thread__cancel(thread_hdl_t _hdl)
  * ******************************************************************/
 int lib_thread__getname(thread_hdl_t _hdl, char * _name, int _maxlen)
 {
-	/* *******************************************************************
-	 * >>>>>	locals 	<<<<<<
-	 * ******************************************************************/
 	int ret = EOK;
 	int name_length;
-	char *name;
-	/* *******************************************************************
-	 * >>>>>	start of code section			<<<<<<
-	 * ******************************************************************/
+	const char *name;
+
 	if ((_hdl == NULL) || (_name == NULL)) {
 		ret = -EPAR_NULL;
 		goto ERR_0;
 	}
 
-	name = pcTaskGetTaskName(_hdl->rtos_thread_hdl);
+	name = _hdl->thread_name;
 	if(name == NULL) {
-		ret = -ESTD_SRCH;
+		ret = -ESTD_NOENT;
 		goto ERR_0;
 	}
 
@@ -730,7 +729,7 @@ int lib_thread__signal_init (signal_hdl_t *_hdl)
 		goto ERR_0;
 	}
 
-	sgn_hdl = (signal_hdl_t)(sizeof(struct signal_hdl_attr));
+	sgn_hdl = (signal_hdl_t)pvPortMalloc(sizeof(struct signal_hdl_attr));
 	if (sgn_hdl == NULL) {
 		ret = -ESTD_NOMEM;
 		goto ERR_0;
