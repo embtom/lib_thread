@@ -165,14 +165,14 @@ int lib_thread__init(enum process_sched _sched, int _pcur)
  * ---------
  * \return	'0', if successful, < '0' if not successful
  * ******************************************************************/
-int lib_thread__create (thread_hdl_t *_hdl, thread_worker_t *_worker, void *_arg, int _relative_priority, const char const *_thread_name)
+int lib_thread__create (thread_hdl_t *_hdl, thread_worker_t *_worker, void *_arg, int _relative_priority, const char *_thread_name)
 {
 	unsigned long prio;
 	int ret;
 	struct thread_hdl_attr *hdl;
 	struct thunk_task_attr *thunk_attr;
-
-
+	const char *thread_name = "noName";	
+	
 	if ((_hdl == NULL) || (_worker == NULL)) {
 		ret = -EPAR_NULL;
 		goto ERR_0;
@@ -209,7 +209,11 @@ int lib_thread__create (thread_hdl_t *_hdl, thread_worker_t *_worker, void *_arg
 		hdl->thunk_attr = thunk_attr;
 	}
 
-	ret = (int)xTaskCreate(&thunk_lib_thread__taskprocessing, _thread_name, configMINIMAL_STACK_SIZE, (void*)thunk_attr, prio, &hdl->rtos_thread_hdl);
+	if(_thread_name != NULL) {
+		thread_name = _thread_name; 
+	}
+
+	ret = (int)xTaskCreate(&thunk_lib_thread__taskprocessing, thread_name, configMINIMAL_STACK_SIZE, (void*)thunk_attr, prio, &hdl->rtos_thread_hdl);
 	switch (ret) {
 		case pdPASS 								: ret = EOK; break;
 		case errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY	: ret = -ESTD_NOMEM; break;
@@ -368,23 +372,18 @@ int lib_thread__cancel(thread_hdl_t _hdl)
  * ******************************************************************/
 int lib_thread__getname(thread_hdl_t _hdl, char * _name, int _maxlen)
 {
-	/* *******************************************************************
-	 * >>>>>	locals 	<<<<<<
-	 * ******************************************************************/
 	int ret = EOK;
 	int name_length;
-	char *name;
-	/* *******************************************************************
-	 * >>>>>	start of code section			<<<<<<
-	 * ******************************************************************/
+	const char *name;
+
 	if ((_hdl == NULL) || (_name == NULL)) {
 		ret = -EPAR_NULL;
 		goto ERR_0;
 	}
 
-	name = pcTaskGetTaskName(_hdl->rtos_thread_hdl);
+	name = _hdl->thread_name;
 	if(name == NULL) {
-		ret = -ESTD_SRCH;
+		ret = -ESTD_NOENT;
 		goto ERR_0;
 	}
 
@@ -527,7 +526,8 @@ int lib_thread__mutex_lock (mutex_hdl_t _hdl)
 {
 	int ret;
 	TaskHandle_t current_thd, mtx_owner_thd;
-
+	BaseType_t isInterrupt;
+	uint32_t lock;
 
 	if (_hdl == NULL){
 		ret = -EPAR_NULL;
@@ -539,6 +539,11 @@ int lib_thread__mutex_lock (mutex_hdl_t _hdl)
 		goto ERR_0;
 	}
 
+	isInterrupt = xPortIsInsideInterrupt();
+	if (isInterrupt) {
+		return -EEXEC_INVCXT;;
+	}
+	
 	taskENTER_CRITICAL();
 	if (_hdl->mode == MTX_MODE_normal) {
 		current_thd = xTaskGetCurrentTaskHandle();
@@ -548,7 +553,6 @@ int lib_thread__mutex_lock (mutex_hdl_t _hdl)
 			goto ERR_1;
 		}
 	}
-
 	/* try to obtain the mutex, in case it is not  */
 	taskEXIT_CRITICAL();
 
@@ -601,6 +605,7 @@ int lib_thread__mutex_unlock (mutex_hdl_t _hdl)
 {
 	int ret;
 	TaskHandle_t mtx_owner_thd, current_thd;
+	BaseType_t isInterrupt;
 
 	if (_hdl == NULL){
 		ret = -EPAR_NULL;
@@ -610,6 +615,11 @@ int lib_thread__mutex_unlock (mutex_hdl_t _hdl)
 	if (_hdl->rtos_mtx_hdl == NULL) {
 		ret = -ESTD_PERM;
 		goto ERR_0;
+	}
+
+	isInterrupt = xPortIsInsideInterrupt();
+	if (isInterrupt) {
+		return -EEXEC_INVCXT;;
 	}
 
 	current_thd = xTaskGetCurrentTaskHandle();
@@ -665,9 +675,15 @@ int lib_thread__mutex_trylock (mutex_hdl_t _hdl)
 {
 	int ret;
 	TaskHandle_t mtx_owner_thd;
+	BaseType_t isInterrupt;
 
 	if (_hdl == NULL){
 		return -EPAR_NULL;
+	}
+
+	isInterrupt = xPortIsInsideInterrupt();
+	if (isInterrupt) {
+		return -EEXEC_INVCXT;
 	}
 
 	taskENTER_CRITICAL();
@@ -699,7 +715,6 @@ int lib_thread__mutex_trylock (mutex_hdl_t _hdl)
 		goto ERR_0;
 	}
 
-
 	msg(LOG_LEVEL_info, M_LIB_THREAD__MODULE_ID, "mutex_trylock(): successul (ID:'%u')", _hdl->rtos_mtx_hdl);
 	return EOK;
 
@@ -730,7 +745,7 @@ int lib_thread__signal_init (signal_hdl_t *_hdl)
 		goto ERR_0;
 	}
 
-	sgn_hdl = (signal_hdl_t)(sizeof(struct signal_hdl_attr));
+	sgn_hdl = (signal_hdl_t)pvPortMalloc(sizeof(struct signal_hdl_attr));
 	if (sgn_hdl == NULL) {
 		ret = -ESTD_NOMEM;
 		goto ERR_0;
@@ -891,10 +906,16 @@ int lib_thread__signal_wait (signal_hdl_t _hdl)
 	int ret_val, ret;
 	uint32_t notify_value;
 	struct signal_wait_node *sgn_wait_node;
+	BaseType_t isInterrupt;
 
 	if (_hdl == NULL){
 		ret = -EPAR_NULL;
 		goto ERR_0;
+	}
+
+	isInterrupt = xPortIsInsideInterrupt();
+	if(isInterrupt) {
+		return -EEXEC_INVCXT;
 	}
 
 //	if (_hdl->destroy) {
@@ -955,16 +976,18 @@ int lib_thread__signal_timedwait (signal_hdl_t _hdl, unsigned int _milliseconds)
 {
 	int ret_val, ret;
 	uint32_t notify_value;
-	TaskHandle_t current_task;
-
 	struct signal_wait_node *sgn_wait_node;
+	BaseType_t isInterrupt;
 
 	if (_hdl == NULL){
 		ret = -EPAR_NULL;
 		goto ERR_0;
 	}
 
-	current_task = xTaskGetCurrentTaskHandle();
+	isInterrupt = xPortIsInsideInterrupt();
+	if(isInterrupt) {
+		return -EEXEC_INVCXT;
+	}
 
 //	if (_hdl->destroy) {
 //		current_task->ulNotifiedValue = 0;
@@ -1124,10 +1147,16 @@ int lib_thread__sem_destroy (sem_hdl_t *_hdl)
 int lib_thread__sem_timedwait (sem_hdl_t _hdl, int _milliseconds)
 {
 	int ret, ret_val;
+	BaseType_t isInterrupt;
 
 	if (_hdl == NULL){
 		ret = -EPAR_NULL;
 		goto ERR_0;
+	}
+
+	isInterrupt = xPortIsInsideInterrupt();
+	if(isInterrupt) {
+		return -EEXEC_INVCXT;
 	}
 
 	ret_val = xSemaphoreTake(_hdl->rtos_sem_hdl, pdMS_TO_TICKS(_milliseconds)); //_milliseconds / portTICK_PERIOD_MS
@@ -1155,14 +1184,16 @@ int lib_thread__sem_post (sem_hdl_t _hdl)
 {
 	int ret;
 	BaseType_t xHigherPriorityTaskWoken;
+	BaseType_t isInterrupt;
 
 	if (_hdl == NULL){
 		ret = -EPAR_NULL;
 		goto ERR_0;
 	}
 
-	if(portNVIC_INT_CTRL_REG & portVECTACTIVE_MASK) {
-		 ret = xSemaphoreGiveFromISR( _hdl->rtos_sem_hdl, &xHigherPriorityTaskWoken );
+	isInterrupt = xPortIsInsideInterrupt();
+	if(isInterrupt) {
+		ret = xSemaphoreGiveFromISR( _hdl->rtos_sem_hdl, &xHigherPriorityTaskWoken );
 	}
 	else {
 		ret = xSemaphoreGive(_hdl->rtos_sem_hdl);
@@ -1196,10 +1227,16 @@ int lib_thread__sem_post (sem_hdl_t _hdl)
 int lib_thread__sem_wait (sem_hdl_t _hdl)
 {
 	int ret, ret_val;
+	BaseType_t isInterrupt;
 
 	if (_hdl == NULL){
 		ret = -EPAR_NULL;
 		goto ERR_0;
+	}
+
+	isInterrupt = xPortIsInsideInterrupt();
+	if(isInterrupt) {
+		return -EEXEC_INVCXT;
 	}
 
 	ret_val = xSemaphoreTake(_hdl->rtos_sem_hdl, portMAX_DELAY);
@@ -1237,10 +1274,16 @@ int lib_thread__sem_wait (sem_hdl_t _hdl)
 int lib_thread__sem_trywait (sem_hdl_t _hdl)
 {
 	int ret, ret_val;
+	BaseType_t isInterrupt;
 
 	if (_hdl == NULL){
 		ret = -EPAR_NULL;
 		goto ERR_0;
+	}
+
+	isInterrupt = xPortIsInsideInterrupt();
+	if (isInterrupt) {
+		return -EEXEC_INVCXT;;
 	}
 
 	ret_val = xSemaphoreTake(_hdl->rtos_sem_hdl, 0);
@@ -1543,6 +1586,7 @@ int lib_thread__cond_timedwait(cond_hdl_t _hdl, mutex_hdl_t _mtx, int _tmoms)
 {
 	int ret, ret2;
 	TickType_t timeout;
+	BaseType_t isInterrupt;
 
 	/* check arguments for validity */
 	if ((_hdl == NULL) || (_mtx == NULL)) {
@@ -1550,6 +1594,10 @@ int lib_thread__cond_timedwait(cond_hdl_t _hdl, mutex_hdl_t _mtx, int _tmoms)
 		goto ERR_0;
 	}
 
+	isInterrupt = xPortIsInsideInterrupt();
+	if (isInterrupt) {
+		return -EEXEC_INVCXT;;
+	}
 	//TODO check initialized
 
 	/* evaluate specified timeout */
