@@ -482,14 +482,7 @@ int lib_thread__msleep (unsigned int _milliseconds)
 
 /* *******************************************************************
  * \brief	Initialization of a mutex object
- * ---------
- * \remark
- * ---------
- *
  * \param	_hdl			[in/out] :	pointer to the handle of a mutex object
- * 										to initialize
- *
- * ---------
  * \return	'0', if successful, < '0' if not successful
  * ******************************************************************/
 int lib_thread__mutex_init (mutex_hdl_t *_hdl)
@@ -525,6 +518,89 @@ int lib_thread__mutex_init (mutex_hdl_t *_hdl)
 	}
 
 	ret = pthread_mutexattr_settype(&mutex_attr, PTHREAD_MUTEX_ERRORCHECK);
+	if (ret != EOK) {
+		ret = convert_std_errno(ret);
+		goto ERR_1;
+	}
+
+	hdl = (mutex_hdl_t)malloc (sizeof(struct mutex_hdl_attr));
+	if (hdl == NULL) {
+		ret = -EPAR_NULL;
+		goto ERR_1;
+	}
+
+	ret = pthread_mutex_init(&hdl->mtx_hdl,&mutex_attr);
+	if (ret != EOK) {
+		ret = convert_std_errno(ret);
+		goto ERR_2;
+	}
+
+	ret = pthread_mutexattr_destroy(&mutex_attr);
+	if (ret != EOK) {
+		ret = convert_std_errno(ret);
+		goto ERR_0;
+	}
+
+	*_hdl = hdl;
+    msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s():  successfully ",__func__);
+
+	return EOK;
+
+	ERR_2:
+	free(hdl);
+
+	ERR_1:
+	pthread_mutexattr_destroy(&mutex_attr);
+
+	ERR_0:
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i ",__func__, ret );
+	return ret;
+}
+
+/* *******************************************************************
+ * \brief	Initialization of a recursive mutex object
+ * \param	_hdl			[in/out] :	pointer to the handle of a mutex object
+ * \return	'0', if successful, < '0' if not successful
+ * ******************************************************************/
+int lib_thread__mutex_recursive_init (mutex_hdl_t *_hdl)
+{
+	int ret;
+	pthread_mutexattr_t mutex_attr;
+	mutex_hdl_t hdl;
+
+	if (_hdl == NULL) {
+		ret = -EPAR_NULL;
+		goto ERR_0;
+	}
+
+	ret = pthread_mutexattr_init(&mutex_attr);
+	if (ret != EOK) {
+		ret = convert_std_errno(ret);
+		goto ERR_0;
+	}
+
+    //	PTHREAD_PRIO_NONE The mutex uses no priority protocol.
+    //	PTHREAD_PRIO_PROTECT The mutex uses the priority ceiling protocol.
+    //	PTHREAD_PRIO_INHERIT The mutex uses the priority inheritance protocol.
+
+	//	The priority inheritance protocol lets a mutex elevate the priority of its holder
+	//  to that of the waiting thread with the highest priority.
+	//	Because the priority inheritance protocol awards a priority boost to a mutex holder
+	//  only when it's absolutely needed, it can be more efficient than the priority ceiling protocol.
+
+	ret = pthread_mutexattr_setprotocol (&mutex_attr,PTHREAD_PRIO_INHERIT);
+	if (ret != EOK) {
+		ret = convert_std_errno(ret);
+		goto ERR_1;
+	}
+
+	ret = pthread_mutexattr_settype(&mutex_attr, PTHREAD_MUTEX_ERRORCHECK);
+	if (ret != EOK) {
+		ret = convert_std_errno(ret);
+		goto ERR_1;
+	}
+
+	ret = pthread_mutexattr_settype(&mutex_attr, PTHREAD_MUTEX_RECURSIVE);
 	if (ret != EOK) {
 		ret = convert_std_errno(ret);
 		goto ERR_1;
