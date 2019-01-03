@@ -1,19 +1,26 @@
-/* ****************************************************************************************************
- * lib_thread.c within the following project: lib_thread
- *
- *  compiler:   GNU Tools ARM LINUX
- *  target:     armv6
- *  author:	    Tom
- * ****************************************************************************************************/
-
-/* ****************************************************************************************************/
-
 /*
- *	******************************* change log *******************************
- *  date			user			comment
- * 	06 April 2015			Tom			- creation of lib_thread.c
- *  21 April 2015			Tom			- add of comments anf logging messages
+ * This file is part of the EMBTOM project
+ * Copyright (c) 2018-2019 Thomas Willetal 
+ * (https://github.com/tom3333)
  *
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the
+ * "Software"), to deal in the Software without restriction, including
+ * without limitation the rights to use, copy, modify, merge, publish,
+ * distribute, sublicense, and/or sell copies of the Software, and to
+ * permit persons to whom the Software is furnished to do so, subject to
+ * the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+ * LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+ * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+ * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
 /* *******************************************************************
@@ -59,11 +66,11 @@ struct internal_wakeup {
  * ******************************************************************/
 
 /* ************************************************************************//**
- * \brief	Init of the wakeup component
+ * \brief Initialization of the wakeup 
  *
  * Attention:
- * At the POSIX environment have to be called at the start of the "main"
- * because the signal mask are modified
+ * At the POSIX environment it to be called at the start of the "main"
+ * because the signal mask has to be modified
  *
  * \return	EOK				Success
  *			-EEXEC_NOINIT	Component not (yet) initialized (any more)
@@ -75,7 +82,7 @@ int lib_thread__wakeup_init(void)
 }
 
 /* ************************************************************************//**
- * \brief	Cleanup wakeup component of lib_thread
+ * \brief	Cleanup of wakeup component
  *
  * \return	EOK				Success
  *			-EEXEC_NOINIT	Component not (yet) initialized (any more)
@@ -87,10 +94,9 @@ int lib_thread__wakeup_cleanup(void)
 }
 
 /* ************************************************************************//**
- * \brief	Create a new wakeup object with the specified interval
+ * \brief	Creation of a wakeup object with the specified interval
  *
- * The utilized time base is a strict monotonic system clock, and so is not
- * affected when e.g. adjusting the local date and time of the system.
+ * The underlaying timer is monotonic system clock 
  *
  * \param	*_wu_obj	[out]	pointer to handle of the wakeup object (will be allocated; only valid on successful return)
  * \param	_interval			wakeup interval in ms (must not be 0)
@@ -163,11 +169,11 @@ int lib_thread__wakeup_create(wakeup_hdl_t * _wu_obj, unsigned _interval)
 /* ************************************************************************//**
  * \brief	Destroy an initialized wakeup object
  *
- * \param	*_wu_obj	[in/out]	pointer to handle of the wakeup object (is only destroyed on successful return)
- * \return	EOK				Success
- *			-EEXEC_NOINIT	Component not (yet) initialized (any more)
- *			-EPAR_NULL		NULL pointer specified for _wu_obj
- *			-EINVAL		_wu_obj is invalid
+ * \param	*_wu_obj	[in/out]	:	pointer to handle of the wakeup object (is only destroyed on successful return)
+ * \return	EOK						:	Success
+ *			-EEXEC_NOINIT			: 	Component not (yet) initialized (any more)
+ *			-EPAR_NULL				:	NULL pointer specified for _wu_obj
+ *			-EINVAL					:	_wu_obj is invalid
  * ****************************************************************************/
 int lib_thread__wakeup_destroy(wakeup_hdl_t *_wu_obj)
 {
