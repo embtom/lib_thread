@@ -1,7 +1,7 @@
 /*
  * This file is part of the EMBTOM project
  * Copyright (c) 2018-2019 Thomas Willetal 
- * (https://github.com/tom3333)
+ * (https://github.com/embtom)
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files (the
@@ -32,7 +32,7 @@
 #include <string.h>
 #include <errno.h>
 #include <stdlib.h>
-
+#include <stdbool.h>
 
 /* system */
 #include <sys/types.h>
@@ -41,6 +41,7 @@
 #include <pthread.h>
 #include <sched.h>
 #include <semaphore.h>
+
 /* project*/
 #include <lib_log.h>
 #include "lib_convention__errno.h"
@@ -84,6 +85,27 @@ struct condvar_hdl_attr {
 	unsigned int number_of_condition_outstanding;
 };
 
+/* *******************************************************************
+ * cas helper to check if greater then zero -> decrement
+ * ******************************************************************/
+static inline bool cas_compare_not_zero_and_dec (unsigned int *ptr)
+{
+	bool ok;
+    int snapped, proposed;
+    do {
+        snapped = *ptr;
+
+        if (snapped > 0) {
+            proposed = snapped -1;
+            ok = true;
+        }
+        else {
+            proposed = snapped;
+            ok = false;
+        }
+    } while (!__sync_bool_compare_and_swap(ptr, snapped, proposed));
+	return ok;
+}
 
 /* *******************************************************************
  * static function declarations
@@ -91,7 +113,6 @@ struct condvar_hdl_attr {
 static char* lib_thread__strsched(enum process_sched _sched);
 void lib_thread__signal_pthread_cancel_handler(void *_hdl);
 static int lib_thread__convert_relative2abstime(const int _clock_src, const unsigned _tmoms, struct timespec *_timespec);
-
 
 /* *******************************************************************
  * \brief	Initialization of the lib_thread
@@ -613,7 +634,7 @@ int lib_thread__mutex_recursive_init (mutex_hdl_t *_hdl)
 		goto ERR_1;
 	}
 
-	hdl = (mutex_hdl_t)malloc (sizeof(struct mutex_hdl_attr));
+	hdl = (mutex_hdl_t) malloc (sizeof(struct mutex_hdl_attr));
 	if (hdl == NULL) {
 		ret = -EPAR_NULL;
 		goto ERR_1;
@@ -729,7 +750,7 @@ int lib_thread__mutex_lock (mutex_hdl_t _hdl)
 		goto ERR_0;
 	}
 
-	msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s():  successfully (Mutex ID '%u') ",__func__, &_hdl->mtx_hdl);
+	msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s():  successfully",__func__);
 	return EOK;
 
 	ERR_0:
@@ -764,7 +785,7 @@ int lib_thread__mutex_unlock (mutex_hdl_t _hdl)
 		goto ERR_0;
 	}
 
-	msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s():  successfully (Mutex ID '%u') ",__func__, &_hdl->mtx_hdl);
+	msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s():  successfully",__func__);
 	return EOK;
 
 	ERR_0:
@@ -806,15 +827,15 @@ int lib_thread__mutex_trylock (mutex_hdl_t _hdl)
 		}
 	}
 
-	msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s(): successfully (Mutex ID '%u') ", __func__, &_hdl->mtx_hdl);
+	msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s(): successfully", __func__);
 	return EOK;
 
 	ERR_0:
 
 	if (ret == -ESTD_BUSY)
-		msg (LOG_LEVEL_warning, LIB_THREAD_MODULE_ID, "%s(): Mutex already locked (Mutex ID '%u') ",__func__, &_hdl->mtx_hdl);
+		msg (LOG_LEVEL_warning, LIB_THREAD_MODULE_ID, "%s(): Mutex already locked", __func__);
 	else
-		msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i ",__func__,ret );
+		msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i", __func__, ret);
 	return ret;
 }
 
@@ -869,7 +890,7 @@ int lib_thread__signal_init (signal_hdl_t *_hdl)
 		goto ERR_2;
 	}
 
-	hdl = (signal_hdl_t)malloc (sizeof (struct signal_hdl_attr));
+	hdl = (signal_hdl_t) malloc (sizeof (struct signal_hdl_attr));
 	if(hdl == NULL) {
 		ret = -ESTD_NOMEM;
 		goto ERR_1;
@@ -904,7 +925,7 @@ int lib_thread__signal_init (signal_hdl_t *_hdl)
 	hdl->destroy_active = 0;
 
 	*_hdl = hdl;
-	msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s():  successfully (Signal ID '%u') ",__func__, &hdl->cond_hdl);
+	msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s():  successfully", __func__);
 	return EOK;
 
 	ERR_5:
@@ -1034,15 +1055,15 @@ int lib_thread__signal_destroy (signal_hdl_t *_hdl)
 
 	free(*_hdl);
 	*_hdl = NULL;
-    msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s(): successfully ",__func__);
+    msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s(): successfully ", __func__);
 	return EOK;
 
 	ERR_1:
 	pthread_mutex_unlock(&(*_hdl)->mtx_hdl);
 
 	ERR_0:
-	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i ",__func__, ret );
-
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i", __func__, ret);
+	
 	return ret;
 }
 
@@ -1061,6 +1082,7 @@ int lib_thread__signal_destroy (signal_hdl_t *_hdl)
 int lib_thread__signal_send (signal_hdl_t _hdl)
 {
 	int ret;
+	bool ok;
 
 	if (_hdl == NULL) {
 		ret = -EPAR_NULL;
@@ -1078,15 +1100,19 @@ int lib_thread__signal_send (signal_hdl_t _hdl)
 		goto ERR_1;
 	}	/* check whether there is any pending signal */
 
-	if (_hdl->number_of_signal_outstanding > 0) {
-		/* decrement number of pending signals */
-		_hdl->number_of_signal_outstanding--;
+	/* if (_hdl->number_of_signal_outstanding > 0) {
+		_hdl->number_of_signal_outstanding--; */
 
+	/* decrement number of pending signals */
+	ok = cas_compare_not_zero_and_dec(&_hdl->number_of_signal_outstanding);
+	
+	if(ok) {
 		/* unlock signal mutex */
 		ret = pthread_mutex_unlock(&_hdl->mtx_hdl);
 		if (ret != 0){	/* should never happen */
 			ret = convert_std_errno(ret);
 			/* increment number of pending signals again as we are not able to unlock the signal's mutex (which is mandatory for actually processing the signal) */
+			
 			_hdl->number_of_signal_outstanding++;
 			return ret;
 		}
@@ -1101,7 +1127,7 @@ int lib_thread__signal_send (signal_hdl_t _hdl)
 			pthread_mutex_unlock(&_hdl->mtx_hdl);
 			return ret;
 		}
-	}else{
+	} else {
 		/* nobody is waiting for this signal -> just unlock signal mutex */
 		ret = pthread_mutex_unlock(&_hdl->mtx_hdl);
 		if (ret != 0){	/* should never happen */
@@ -1109,18 +1135,16 @@ int lib_thread__signal_send (signal_hdl_t _hdl)
 			return ret;
 		}
 	}
-
 	/* Check if somebody is waiting for signal */
 
-
-    msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s():  successfully  ",__func__);
+    msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s():  successfully", __func__);
 	return EOK;
 
 	ERR_1:
 	pthread_mutex_unlock(&_hdl->mtx_hdl);
 
 	ERR_0:
-	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i ",__func__, ret );
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i", __func__, ret);
 
 	return ret;
 
@@ -1158,9 +1182,9 @@ int lib_thread__signal_wait (signal_hdl_t _hdl)
 		ret = -ESTD_PERM;
 	}
 	else {
-		_hdl->number_of_signal_waiting_threads++;
-		_hdl->number_of_signal_outstanding++;
-
+		__sync_fetch_and_add(&_hdl->number_of_signal_waiting_threads, 1);
+		__sync_fetch_and_add(&_hdl->number_of_signal_outstanding, 1);
+		
 		/*Set a cleanup handler to threat the thread cancellation */
 		pthread_cleanup_push(&lib_thread__signal_pthread_cancel_handler, _hdl);
 
@@ -1170,8 +1194,8 @@ int lib_thread__signal_wait (signal_hdl_t _hdl)
 			ret = pthread_cond_wait(&_hdl->cond_hdl, &_hdl->mtx_hdl);
 			if (ret != EOK) {
 				ret = convert_std_errno(ret);
-				_hdl->number_of_signal_waiting_threads--;
-				_hdl->number_of_signal_outstanding--;
+				__sync_fetch_and_sub(&_hdl->number_of_signal_waiting_threads, 1);
+				__sync_fetch_and_sub(&_hdl->number_of_signal_outstanding, 1);		
 				break;
 			}
 
@@ -1184,7 +1208,7 @@ int lib_thread__signal_wait (signal_hdl_t _hdl)
 		pthread_cleanup_pop(0);
 	}
 
-	_hdl->number_of_signal_waiting_threads--;
+	__sync_fetch_and_sub(&_hdl->number_of_signal_waiting_threads, 1);
 
 	if (_hdl->destroy_active) {
 		ret = -ESTD_PERM;
@@ -1199,10 +1223,10 @@ int lib_thread__signal_wait (signal_hdl_t _hdl)
 
 	switch (ret) {
 		case EOK :
-            msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s(): unblocked successfully  ",__func__);
+            msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s(): unblocked successfully", __func__);
 			break;
 		case -ESTD_PERM :
-            msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s(): unblocked destroyed  ",__func__);
+            msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s(): unblocked destroyed", __func__);
 			break;
 		default :
 			goto ERR_0;
@@ -1261,11 +1285,9 @@ int lib_thread__signal_timedwait (signal_hdl_t _hdl, unsigned int _milliseconds)
 		ret = -ESTD_PERM;
 	}
 	else {
-		_hdl->number_of_signal_waiting_threads++;
-		_hdl->number_of_signal_outstanding++;
+		__sync_fetch_and_add(&_hdl->number_of_signal_waiting_threads, 1);
+		__sync_fetch_and_add(&_hdl->number_of_signal_outstanding, 1);
 		pthread_cleanup_push(&lib_thread__signal_pthread_cancel_handler, _hdl);
-
-		signal_id = (int)&_hdl->cond_hdl;
 
 		/* A check if the thread unblocking was no spurious wakeup*/
 		while (1)
@@ -1273,8 +1295,8 @@ int lib_thread__signal_timedwait (signal_hdl_t _hdl, unsigned int _milliseconds)
 			ret = pthread_cond_timedwait(&_hdl->cond_hdl, &_hdl->mtx_hdl,&actual_time);
 			if (ret != EOK) {
 				ret = convert_std_errno(ret);
-				_hdl->number_of_signal_waiting_threads--;
-				_hdl->number_of_signal_outstanding--;
+				__sync_fetch_and_sub(&_hdl->number_of_signal_waiting_threads, 1);
+				__sync_fetch_and_sub(&_hdl->number_of_signal_outstanding, 1);
 				break;
 			}
 
@@ -1286,7 +1308,7 @@ int lib_thread__signal_timedwait (signal_hdl_t _hdl, unsigned int _milliseconds)
 		pthread_cleanup_pop(0);
 	}
 
-	_hdl->number_of_signal_waiting_threads--;
+	__sync_fetch_and_sub(&_hdl->number_of_signal_waiting_threads, 1);
 
 	if (_hdl->destroy_active) {
 		ret = -ESTD_PERM;
@@ -1301,13 +1323,13 @@ int lib_thread__signal_timedwait (signal_hdl_t _hdl, unsigned int _milliseconds)
 
 	switch (ret) {
 		case EOK :
-			msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s(): unblocked successfully (Signal ID '%u') ",__func__, signal_id);
+			msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s(): unblocked successfully",__func__);
 			break;
 		case -ESTD_PERM :
-			msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s(): unblocked destroyed (Signal ID '%u') ",__func__, signal_id);
+			msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s(): unblocked destroyed",__func__);
 			break;
 		case -EEXEC_TO :
-			msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s(): unblocked timeout (Signal ID '%u') ",__func__, signal_id);
+			msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s(): unblocked timeout",__func__);
 			break;
 		default :
 			goto ERR_0;
@@ -1347,7 +1369,7 @@ int lib_thread__sem_init (sem_hdl_t *_hdl, int _count)
 		goto ERR_0;
 	}
 
-	hdl = (sem_hdl_t)malloc(sizeof (struct sem_hdl_attr));
+	hdl = (sem_hdl_t) malloc (sizeof (struct sem_hdl_attr));
 	if (hdl == NULL) {
 		ret = -ESTD_NOMEM;
 		goto ERR_0;
@@ -1360,7 +1382,7 @@ int lib_thread__sem_init (sem_hdl_t *_hdl, int _count)
 	}
 
 	*_hdl = hdl;
-    msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "lib_thread__sem_init :  successfully ");
+    msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "lib_thread__sem_init :  successfully");
 	return EOK;
 
 	ERR_1:
@@ -1370,7 +1392,7 @@ int lib_thread__sem_init (sem_hdl_t *_hdl, int _count)
 	}
 
 	ERR_0:
-	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i ",__func__, ret );
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i", __func__, ret);
 	return ret;
 }
 
@@ -1407,14 +1429,12 @@ int lib_thread__sem_destroy (sem_hdl_t *_hdl)
 
 	free(*_hdl);
 	*_hdl = NULL;
-    msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s():  successfully ",__func__);
-
+    msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s():  successfully", __func__);
 
 	return EOK;
 
-
 	ERR_0:
-	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i ",__func__, ret );
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i", __func__, ret);
 	return ret;
 }
 
@@ -1450,7 +1470,7 @@ int lib_thread__sem_post (sem_hdl_t _hdl)
 	return EOK;
 
 	ERR_0:
-	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i ",__func__, ret );
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i", __func__, ret);
 	return ret;
 }
 
@@ -1463,7 +1483,6 @@ int lib_thread__sem_post (sem_hdl_t _hdl)
  *
  * \param	_hdl				[in] :	handle of a semaphore object
  *
- * ---------
  * \return	'0', if successful, < '0' if not successful
  * ******************************************************************/
 int lib_thread__sem_wait (sem_hdl_t _hdl)
@@ -1481,12 +1500,12 @@ int lib_thread__sem_wait (sem_hdl_t _hdl)
 		goto ERR_0;
 	}
 
-    msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s():  successfully ",__func__);
+    msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s():  successfully", __func__);
 
 	return EOK;
 
 	ERR_0:
-	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s() : failed with retval %i ", __func__, ret );
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s() : failed with retval %i", __func__, ret);
 	return ret;
 }
 
@@ -1529,7 +1548,7 @@ int lib_thread__sem_timedwait (sem_hdl_t _hdl, int _milliseconds)
 	return EOK;
 
 	ERR_0:
-	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s() : failed with retval %i ", __func__, ret );
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s() : failed with retval %i", __func__, ret);
 	return ret;
 }
 
@@ -1565,7 +1584,7 @@ int lib_thread__sem_trywait (sem_hdl_t _hdl)
 	return EOK;
 
 	ERR_0:
-	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i ",__func__, ret );
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i", __func__, ret);
 	return ret;
 }
 
@@ -1589,27 +1608,27 @@ int lib_thread__cond_init(cond_hdl_t *_hdl)
 	pthread_condattr_t	cnd_attr;	/* condition attribute object */
 
 	/* check arguments */
-	if (_hdl == NULL){
+	if (_hdl == NULL) {
 		ret = -EPAR_NULL;
 		goto ERR_0;
 	}
 
 	/* initialize condition attribute */
 	ret = pthread_condattr_init(&cnd_attr);
-	if (ret != 0){
+	if (ret != 0) {
 		ret = convert_std_errno(ret);
 		goto ERR_0;
 	}
 
 	/* set clock source */
 	ret = pthread_condattr_setclock(&cnd_attr, CLOCK_MONOTONIC);
-	if (ret != 0){	/* should never happen */
+	if (ret != 0) {	/* should never happen */
 		ret = convert_std_errno(ret);
 		goto ERR_1;
 	}
 
 	/* create handle on heap */
-	hdl = (cond_hdl_t)malloc(sizeof(struct condvar_hdl_attr));
+	hdl = (cond_hdl_t) malloc (sizeof(struct condvar_hdl_attr));
 	if (hdl == NULL){
 		ret = convert_std_errno(errno);
 		goto ERR_1;
@@ -1626,7 +1645,7 @@ int lib_thread__cond_init(cond_hdl_t *_hdl)
 	hdl->number_of_condition_waiting_threads = 0;
 
 	*_hdl = hdl;
-    msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s() :  successfully ",__func__);
+    msg (LOG_LEVEL_debug, LIB_THREAD_MODULE_ID, "%s() :  successfully", __func__);
 	return EOK;
 
 	ERR_2:
@@ -1641,7 +1660,7 @@ int lib_thread__cond_init(cond_hdl_t *_hdl)
 		_hdl = NULL;
 	}
 
-	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i ",__func__, ret );
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i", __func__, ret);
 	return ret;
 }
 
@@ -1703,7 +1722,7 @@ int lib_thread__cond_destroy(cond_hdl_t *_hdl)
 		_hdl = NULL;
 	}
 
-	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i ",__func__, ret );
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i", __func__, ret);
 	return ret;
 }
 
@@ -1728,24 +1747,28 @@ int lib_thread__cond_destroy(cond_hdl_t *_hdl)
  *			-EPAR_NULL		NULL pointer specified for _cond
  *			-ESTD_INVAL		_cond is invalid
  * ****************************************************************************/
-int lib_thread__cond_signal(cond_hdl_t _hdl)
+int lib_thread__cond_signal (cond_hdl_t _hdl)
 {
 	int ret;
+	bool ok;	
 
 	/* check argument */
-	if (_hdl == NULL){
+	if (_hdl == NULL) {
 		ret = -EPAR_NULL;
 		goto ERR_0;
 	}
-//TODO CRITIACL SECTION FIX ME
-	/*check if any thread is waiting for a signal */
-	if (_hdl->number_of_condition_outstanding > 0) {
-		_hdl->number_of_condition_outstanding--;
 
+	/* compare and swap used instead compare and decrement
+		if (_hdl->number_of_condition_outstanding > 0) {
+		_hdl->number_of_condition_outstanding--;      */
+	ok = cas_compare_not_zero_and_dec(&_hdl->number_of_condition_outstanding);
+
+	/*check if any thread is waiting for a signal */
+	if (ok) {
 		/* signal */
 		ret = pthread_cond_signal(&_hdl->cond);
-		if (ret != 0){
-			_hdl->number_of_condition_outstanding++;
+		if (ret != 0) {
+			__sync_fetch_and_add(&_hdl->number_of_condition_outstanding,1);
 			ret = convert_std_errno(ret);
 			goto ERR_0;
 		}
@@ -1754,7 +1777,7 @@ int lib_thread__cond_signal(cond_hdl_t _hdl)
 
 	ERR_0:
 
-	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s() : failed with retval %i ",__func__, ret );
+	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s() : failed with retval %i ",__func__ , ret);
 	return ret;
 }
 
@@ -1844,16 +1867,16 @@ int lib_thread__cond_wait(cond_hdl_t _hdl, mutex_hdl_t _mtx)
 	}
 
 	/* wait */
-	_hdl->number_of_condition_outstanding++;
-	_hdl->number_of_condition_waiting_threads++;
+	__sync_fetch_and_add(&_hdl->number_of_condition_outstanding,1);
+	__sync_fetch_and_add(&_hdl->number_of_condition_waiting_threads,1);
 
 	 /* A check if the thread unblocking was no spurious wakeup*/
 	while (1) {
 		ret = pthread_cond_wait(&(_hdl)->cond, &(_mtx)->mtx_hdl);
 			if (ret != 0) {
 				ret = convert_std_errno(ret);
-				_hdl->number_of_condition_outstanding--;
-				_hdl->number_of_condition_waiting_threads--;
+				__sync_fetch_and_sub(&_hdl->number_of_condition_outstanding,1);
+				__sync_fetch_and_sub(&_hdl->number_of_condition_waiting_threads,1);
 				goto ERR_0;
 		}
 
@@ -1863,7 +1886,7 @@ int lib_thread__cond_wait(cond_hdl_t _hdl, mutex_hdl_t _mtx)
 		}
 	}
 
-	_hdl->number_of_condition_waiting_threads--;
+	__sync_fetch_and_sub(&_hdl->number_of_condition_waiting_threads,1);
 	return EOK;
 
 	ERR_0:
@@ -1923,14 +1946,15 @@ int lib_thread__cond_timedwait(cond_hdl_t _hdl, mutex_hdl_t _mtx, int _tmoms)
 	}
 
 	 /* A check if the thread unblocking was no spurious wakeup*/
-	_hdl->number_of_condition_waiting_threads++;
-	_hdl->number_of_condition_outstanding++;
+
+	__sync_fetch_and_add(&_hdl->number_of_condition_outstanding,1);
+	__sync_fetch_and_add(&_hdl->number_of_condition_waiting_threads,1);
 	while (1) {
 		ret = pthread_cond_timedwait(&(_hdl)->cond, &(_mtx)->mtx_hdl, &cur_time);
 		if (ret != 0){
 			ret = convert_std_errno(ret);
-			_hdl->number_of_condition_outstanding--;
-			_hdl->number_of_condition_waiting_threads--;
+			__sync_fetch_and_sub(&_hdl->number_of_condition_outstanding,1);
+			__sync_fetch_and_sub(&_hdl->number_of_condition_waiting_threads,1);
 			goto ERR_0;
 		}
 
@@ -1940,7 +1964,7 @@ int lib_thread__cond_timedwait(cond_hdl_t _hdl, mutex_hdl_t _mtx, int _tmoms)
 		}
 	}
 
-	_hdl->number_of_condition_waiting_threads--;
+	__sync_fetch_and_sub(&_hdl->number_of_condition_waiting_threads,1);
 	return EOK;
 
 	ERR_0:
