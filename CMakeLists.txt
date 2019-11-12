@@ -6,7 +6,7 @@ add_subdirectory(src)
 ######################################################################################
 # Build configurator
 ######################################################################################
-option(LIB_THREAD_EXTERNAL_IOTTY "Usage of the system iotty library for logging" ${LIB_THREAD_EXTERNAL_IOTTY})
+option(LIB_THREAD_EXTERNAL_STREAMROUTER "Usage of the system streamRouer library for logging" ${LIB_THREAD_EXTERNAL_STREAMROUTER})
 
 #Selector to choose architecture to build lib_thread
 set(LIB_THREAD_ARCHITECTURE ${LIB_THREAD_ARCHITECTURE} CACHE STRING "Architecture to build lib_thread on")
@@ -28,9 +28,9 @@ GET_PROPERTY(LIB_THREAD_SOURCE_C            GLOBAL PROPERTY LIB_THREAD_ARCH_SOUR
 GET_PROPERTY(LIB_THREAD_PRIVATE_DEFINITION  GLOBAL PROPERTY LIB_THREAD_ARCH_PRIVATE_DEFINITION)
 GET_PROPERTY(LIB_THREAD_DEPEND              GLOBAL PROPERTY LIB_THREAD_ARCH_DEPEND)
 
-if (LIB_THREAD_EXTERNAL_IOTTY)
-    find_package(iotty REQUIRED)
-    SET(LIB_THREAD_DEPEND ${LIB_THREAD_DEPEND} lib_convention EMBTOM::iotty)
+if (LIB_THREAD_EXTERNAL_STREAMROUTER)
+    find_package(streamRouter REQUIRED)
+    SET(LIB_THREAD_DEPEND ${LIB_THREAD_DEPEND} lib_convention EMBTOM::streamRouter)
 else()
     SET(LIB_THREAD_DEPEND ${LIB_THREAD_DEPEND} lib_convention lib_log)
 endif()
