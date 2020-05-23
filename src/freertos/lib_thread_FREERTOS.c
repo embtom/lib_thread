@@ -1,6 +1,6 @@
 /*
  * This file is part of the EMBTOM project
- * Copyright (c) 2018-2019 Thomas Willetal 
+ * Copyright (c) 2018-2019 Thomas Willetal
  * (https://github.com/embtom)
  *
  * Permission is hereby granted, free of charge, to any person obtaining
@@ -176,8 +176,8 @@ int lib_thread__create (thread_hdl_t *_hdl, thread_worker_t *_worker, void *_arg
 	int ret;
 	struct thread_hdl_attr *hdl;
 	struct thunk_task_attr *thunk_attr;
-	const char *thread_name = "noName";	
-	
+	const char *thread_name = "noName";
+
 	if ((_hdl == NULL) || (_worker == NULL)) {
 		ret = -EPAR_NULL;
 		goto ERR_0;
@@ -215,7 +215,7 @@ int lib_thread__create (thread_hdl_t *_hdl, thread_worker_t *_worker, void *_arg
 	}
 
 	if(_thread_name != NULL) {
-		thread_name = _thread_name; 
+		thread_name = _thread_name;
 	}
 
 	ret = (int)xTaskCreate(&thunk_lib_thread__taskprocessing, thread_name, configMINIMAL_STACK_SIZE, (void*)thunk_attr, prio, &hdl->rtos_thread_hdl);
@@ -548,7 +548,7 @@ int lib_thread__mutex_lock (mutex_hdl_t _hdl)
 	if (isInterrupt) {
 		return -EEXEC_INVCXT;;
 	}
-	
+
 	taskENTER_CRITICAL();
 	if (_hdl->mode == MTX_MODE_normal) {
 		current_thd = xTaskGetCurrentTaskHandle();

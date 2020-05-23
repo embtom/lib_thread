@@ -1,6 +1,6 @@
 /*
  * This file is part of the EMBTOM project
- * Copyright (c) 2018-2019 Thomas Willetal 
+ * Copyright (c) 2018-2019 Thomas Willetal
  * (https://github.com/embtom)
  *
  * Permission is hereby granted, free of charge, to any person obtaining
@@ -84,7 +84,7 @@ int lib_thread__wakeup_init(void)
 
 /* ************************************************************************//**
  * \brief Cleanup wakeup component
- * 
+ *
  * \return EOK, if successful, < EOK if not successful
  * ****************************************************************************/
 int lib_thread__wakeup_cleanup(void)
@@ -191,7 +191,7 @@ int lib_thread__wakeup_destroy(wakeup_hdl_t *_wu_obj)
  * \brief	Wait on the specified wakeup object
  *
  * This function waits until the specified wakeup object's timeout interval
- * has elapsed. This function should be called at the top of a while or 
+ * has elapsed. This function should be called at the top of a while or
  * for loop.
  * If the wakeup object will be destroyed the wakeup wait routine unblocks
  * with -ESTD_INTR

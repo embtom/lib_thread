@@ -9,7 +9,7 @@ ENDFOREACH(ARG)
 ENDFUNCTION(lib_thread_add_architecture)
 
 ######################################################################################
-# Add architecture specific source files  
+# Add architecture specific source files
 ######################################################################################
 FUNCTION(lib_thread_add_sourcefile_c)
   FOREACH(ARG ${ARGV})

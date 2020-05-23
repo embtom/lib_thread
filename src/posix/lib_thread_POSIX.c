@@ -1,6 +1,6 @@
 /*
  * This file is part of the EMBTOM project
- * Copyright (c) 2018-2019 Thomas Willetal 
+ * Copyright (c) 2018-2019 Thomas Willetal
  * (https://github.com/embtom)
  *
  * Permission is hereby granted, free of charge, to any person obtaining
@@ -1063,7 +1063,7 @@ int lib_thread__signal_destroy (signal_hdl_t *_hdl)
 
 	ERR_0:
 	msg (LOG_LEVEL_error, LIB_THREAD_MODULE_ID, "%s(): failed with retval %i", __func__, ret);
-	
+
 	return ret;
 }
 
@@ -1105,14 +1105,14 @@ int lib_thread__signal_send (signal_hdl_t _hdl)
 
 	/* decrement number of pending signals */
 	ok = cas_compare_not_zero_and_dec(&_hdl->number_of_signal_outstanding);
-	
+
 	if(ok) {
 		/* unlock signal mutex */
 		ret = pthread_mutex_unlock(&_hdl->mtx_hdl);
 		if (ret != 0){	/* should never happen */
 			ret = convert_std_errno(ret);
 			/* increment number of pending signals again as we are not able to unlock the signal's mutex (which is mandatory for actually processing the signal) */
-			
+
 			_hdl->number_of_signal_outstanding++;
 			return ret;
 		}
@@ -1184,7 +1184,7 @@ int lib_thread__signal_wait (signal_hdl_t _hdl)
 	else {
 		__sync_fetch_and_add(&_hdl->number_of_signal_waiting_threads, 1);
 		__sync_fetch_and_add(&_hdl->number_of_signal_outstanding, 1);
-		
+
 		/*Set a cleanup handler to threat the thread cancellation */
 		pthread_cleanup_push(&lib_thread__signal_pthread_cancel_handler, _hdl);
 
@@ -1195,7 +1195,7 @@ int lib_thread__signal_wait (signal_hdl_t _hdl)
 			if (ret != EOK) {
 				ret = convert_std_errno(ret);
 				__sync_fetch_and_sub(&_hdl->number_of_signal_waiting_threads, 1);
-				__sync_fetch_and_sub(&_hdl->number_of_signal_outstanding, 1);		
+				__sync_fetch_and_sub(&_hdl->number_of_signal_outstanding, 1);
 				break;
 			}
 
@@ -1750,7 +1750,7 @@ int lib_thread__cond_destroy(cond_hdl_t *_hdl)
 int lib_thread__cond_signal (cond_hdl_t _hdl)
 {
 	int ret;
-	bool ok;	
+	bool ok;
 
 	/* check argument */
 	if (_hdl == NULL) {

@@ -1,6 +1,6 @@
 /*
  * This file is part of the EMBTOM project
- * Copyright (c) 2018-2019 Thomas Willetal 
+ * Copyright (c) 2018-2019 Thomas Willetal
  * (https://github.com/embtom)
  *
  * Permission is hereby granted, free of charge, to any person obtaining
@@ -66,7 +66,7 @@ struct internal_wakeup {
  * ******************************************************************/
 
 /* ************************************************************************//**
- * \brief Initialization of the wakeup 
+ * \brief Initialization of the wakeup
  *
  * Attention:
  * At the POSIX environment it to be called at the start of the "main"
@@ -96,7 +96,7 @@ int lib_thread__wakeup_cleanup(void)
 /* ************************************************************************//**
  * \brief	Creation of a wakeup object with the specified interval
  *
- * The underlaying timer is monotonic system clock 
+ * The underlaying timer is monotonic system clock
  *
  * \param	*_wu_obj	[out]	pointer to handle of the wakeup object (will be allocated; only valid on successful return)
  * \param	_interval			wakeup interval in ms (must not be 0)
